@@ -1,0 +1,1155 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>花咲く言葉 - Hanasaku Words (HSW配列) | 言葉を咲かせる、新しい指先の魔法</title>
+    <style>
+        :root {
+            --bg-color: #fcfbf9; 
+            --text-color: #333333;
+            --accent-color: #b09c85; 
+            --sakura-color: #f7e6e8; 
+            --garden-green: #769566; 
+            --alert-bg: #fffcfc;
+            --alert-border: #f2e3e3;
+            --key-bg: #ffffff;
+            --key-border: #e0e0e0;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            font-family: "Yu Mincho", "Shippori Mincho", "Noto Serif JP", serif;
+            line-height: 1.8;
+            letter-spacing: 0.05em;
+        }
+
+        /* 🌸 ヒーローセクション */
+        .hero {
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            background: linear-gradient(to bottom, #ffffff, var(--sakura-color));
+            padding: 0 20px;
+        }
+        .hero h1 { font-size: 3.5rem; font-weight: normal; margin-bottom: 5px; letter-spacing: 0.15em; color: #2c2c2c; }
+        .hero p.subtitle { font-size: 1.1rem; color: var(--accent-color); margin-bottom: 30px; letter-spacing: 0.15em; }
+        
+        .hero p.catchphrase { font-size: 1.8rem; color: #333; margin-bottom: 25px; font-weight: bold; line-height: 1.5; }
+        .hero p.catchphrase span { color: var(--garden-green); }
+        .hero p.poetic-intro { max-width: 650px; font-size: 1.05rem; color: #666; margin-top: 10px; }
+
+        /* 共通セクション */
+        .section { padding: 80px 20px; max-width: 850px; margin: 0 auto; }
+        .section h2 { font-size: 2rem; font-weight: normal; text-align: center; margin-bottom: 50px; color: var(--garden-green); border-bottom: 1px solid var(--garden-green); padding-bottom: 20px; }
+
+        /* 🌸 テクニカルサマリー */
+        .tech-summary {
+            background: #fff;
+            border-radius: 12px;
+            padding: 30px;
+            margin: -60px auto 40px auto;
+            max-width: 780px;
+            position: relative;
+            box-shadow: 0 15px 35px rgba(0,0,0,0.05);
+            border: 1px solid #eee;
+            border-top: 4px solid var(--garden-green);
+        }
+        .tech-summary h3 { margin-top: 0; color: var(--garden-green); font-size: 1.1rem; text-align: center; margin-bottom: 25px; }
+        
+        .tech-list { display: flex; gap: 10px; margin-bottom: 25px; padding: 0; list-style: none; flex-wrap: wrap; justify-content: center; }
+        .tech-item { flex: 1; min-width: 150px; text-align: center; font-size: 0.85rem; background: #fdfdfc; border: 1px solid #eee; border-radius: 8px; padding: 15px 8px; position: relative; box-shadow: 0 2px 5px rgba(0,0,0,0.02); }
+        @media (min-width: 650px) {
+            .tech-item:not(:last-child)::after { content: '➔'; position: absolute; right: -12px; top: 50%; transform: translateY(-50%); color: #ccc; font-size: 1.2rem; z-index: 1; }
+        }
+        .tech-item strong { display: block; font-size: 1.05rem; color: #333; margin-bottom: 3px; line-height: 1.3; }
+        .tech-item span.desc { color: #666; font-size: 0.8rem; }
+        
+        .hand-label { display: inline-block; padding: 3px 10px; border-radius: 12px; font-size: 0.75rem; font-weight: bold; margin-bottom: 10px; color: #fff; letter-spacing: 0.05em; }
+        .left-hand-label { background: var(--accent-color); }
+        .right-hand-label { background: var(--garden-green); }
+
+        /* 💡 具体例・図解エリア */
+        .tech-example-group { display: flex; gap: 15px; justify-content: center; align-items: stretch; flex-wrap: wrap; margin-bottom: 20px; }
+        .tech-example-box { flex: 1; background: #fcfcfc; border: 1px dashed #ccc; border-radius: 8px; padding: 15px; text-align: center; min-width: 320px; }
+        .ex-title { margin: 0 0 15px 0; font-size: 0.95rem; color: var(--garden-green); font-weight: bold; border-bottom: 1px solid #eee; padding-bottom: 8px; }
+        
+        .example-row { display: flex; justify-content: center; align-items: center; gap: 6px; margin-bottom: 12px; }
+        .example-row:last-child { margin-bottom: 0; }
+        .ex-key { background: #fff; border: 2px solid #ccc; border-radius: 6px; padding: 6px 10px; box-shadow: 0 3px 0 #ccc; font-weight: bold; line-height: 1.2; font-size: 1rem; font-family: sans-serif; }
+        .ex-key small { font-size: 0.75rem; font-weight: normal; display: block; margin-top: 2px; }
+        .left-key { border-color: var(--accent-color); color: var(--accent-color); }
+        .left-key small { color: var(--accent-color); }
+        .right-key { border-color: var(--garden-green); color: var(--garden-green); }
+        .right-key small { color: var(--garden-green); }
+        .ex-plus, .ex-equal { font-weight: bold; color: #999; font-size: 1.1rem; }
+        .ex-result { font-size: 1.5rem; font-weight: bold; color: var(--garden-green); margin-left: 2px; min-width: 40px; text-align: left; }
+
+        .op-graphic { display: flex; justify-content: center; align-items: center; gap: 20px; background: #fff; border: 1px solid #eee; border-radius: 6px; padding: 15px 10px; height: calc(100% - 45px); box-sizing: border-box;}
+        .op-part { display: flex; flex-direction: column; align-items: center; }
+        .op-btn { display: block; font-weight: bold; color: #555; font-size: 0.95rem; border: 2px solid #ccc; padding: 8px 12px; border-radius: 6px; background: #fafafa; margin-bottom: 8px; box-shadow: 0 3px 0 #ccc; font-family: sans-serif; letter-spacing: 0.05em; }
+        .thumb-btn { border-color: var(--accent-color); color: var(--accent-color); }
+        .op-part small { color: #666; font-size: 0.7rem; font-weight: bold; margin-top: 6px; }
+        .op-center { color: #ccc; font-weight: bold; font-size: 1.2rem; }
+
+        .mini-key-grid { display: flex; flex-direction: column; gap: 4px; align-items: center; }
+        .mini-key-row { display: flex; gap: 4px; justify-content: center; }
+        .m-key { background: #fff; border: 1px solid var(--garden-green); border-radius: 4px; padding: 4px 2px; display: flex; flex-direction: column; align-items: center; min-width: 42px; box-shadow: 0 2px 0 var(--garden-green); }
+        .m-char { font-weight: bold; color: var(--garden-green); font-size: 0.9rem; font-family: sans-serif; line-height: 1; }
+        .m-desc { font-size: 0.55rem; color: #555; margin-top: 4px; line-height: 1; white-space: nowrap; font-weight: bold; }
+
+        /* 🌸 アンチテーゼ */
+        .antithesis-box { background-color: var(--alert-bg); border: 1px solid var(--alert-border); border-radius: 8px; padding: 40px; margin-bottom: 40px; box-shadow: 0 4px 15px rgba(0,0,0,0.02); }
+        .antithesis-box h3 { color: #b76c6c; font-size: 1.4rem; margin-top: 0; margin-bottom: 20px; text-align: center; font-weight: normal; }
+        .anti-point { margin-bottom: 25px; }
+        .anti-point h4 { color: #8a5a5a; font-size: 1.1rem; margin-bottom: 10px; }
+        .anti-point p { color: #555; font-size: 1rem; margin: 0; }
+        .anti-conclusion { font-weight: bold; color: #444; text-align: center; margin-top: 30px; padding-top: 20px; border-top: 1px dashed #eecaca; }
+
+        /* 🌸 比較テーブル */
+        .comp-table { width: 100%; border-collapse: collapse; margin: 40px 0; font-size: 0.95rem; background: #fff; }
+        .comp-table th, .comp-table td { border: 1px solid #eee; padding: 15px; text-align: center; }
+        .comp-table th { background: #fafafa; color: var(--garden-green); font-weight: normal; font-size: 0.85rem; }
+        .highlight-row { background-color: rgba(118, 149, 102, 0.05); font-weight: bold; }
+        .check-mark { color: var(--garden-green); font-weight: bold; }
+
+        /* 🌸 ロードマップ */
+        .roadmap { display: flex; justify-content: space-between; margin-top: 40px; gap: 20px; }
+        .step { flex: 1; text-align: center; position: relative; background: #fff; padding: 20px; border-radius: 8px; border: 1px solid #eee; box-shadow: 0 2px 8px rgba(0,0,0,0.02); }
+        .step-time { font-weight: bold; color: var(--garden-green); display: block; font-size: 1.3rem; margin-bottom: 10px; }
+        .step-desc { font-size: 0.85rem; color: #555; line-height: 1.6; }
+
+        /* 🌸 ３．開花の理 */
+        .logic-grid { display: grid; grid-template-columns: 1fr; gap: 20px; margin-bottom: 40px; }
+        .logic-rule { background: #fff; padding: 25px; border-radius: 6px; box-shadow: 0 2px 8px rgba(0,0,0,0.03); border: 1px solid #eaeaea; }
+        .logic-rule-title { font-size: 1.1rem; color: var(--garden-green); margin-bottom: 15px; font-weight: bold; }
+        .logic-rule p { margin: 0; color: #555; font-size: 1rem; line-height: 1.7; }
+        .logic-conclusion { text-align: center; font-size: 1.1rem; color: var(--accent-color); font-weight: bold; margin-bottom: 60px; }
+
+        /* 🌸 ４．四つの所作 */
+        .feature { display: flex; align-items: flex-start; margin-bottom: 40px; }
+        .feature-number { font-size: 2rem; color: var(--garden-green); margin-right: 30px; font-style: italic; min-width: 40px; }
+        .feature-text h3 { font-size: 1.3rem; margin: 0 0 10px 0; font-weight: normal; color: #2c2c2c; }
+        .feature-text p { color: #555; font-size: 1.05rem; margin: 0; }
+
+        /* 🌸 １．名前に込めた願い */
+        .origin-text { text-align: center; max-width: 680px; margin: 0 auto; color: #444; }
+        .origin-text p { margin-bottom: 25px; }
+        .origin-text .quote { font-size: 1.2rem; color: var(--accent-color); font-weight: bold; padding: 20px; border-left: 3px solid var(--sakura-color); border-right: 3px solid var(--sakura-color); display: inline-block; margin: 10px 0 30px 0; line-height: 1.6; }
+
+        /* ========================================================
+           🌸 ５．シミュレーターエリア
+           ======================================================== */
+        .demo-box { background-color: #fff; border: 1px solid #eaeaea; padding: 25px 30px; border-radius: 8px; text-align: center; box-shadow: 0 4px 15px rgba(0,0,0,0.02); margin-bottom: 40px; transition: height 0.2s ease-out; }
+        
+        #demo-inner { width: 100%; transform-origin: top center; }
+
+        .demo-box h3 { margin-top: 0; color: var(--garden-green); font-weight: normal; font-size: 1.2rem; margin-bottom: 15px; }
+
+        .demo-tabs { 
+            display: flex; justify-content: space-between; flex-wrap: nowrap; gap: 4px; margin-bottom: 15px; width: 100%;
+        }
+        .tab-btn { 
+            background: #f5f5f5; border: 1px solid #ddd; padding: 6px 0; border-radius: 6px; 
+            font-family: inherit; font-size: 0.85rem; color: #555; cursor: pointer; transition: all 0.2s; 
+            outline: none; flex: 1; min-width: 0; text-align: center;
+        }
+        .tab-btn:hover { background: #eee; }
+        .tab-btn.active { background: var(--garden-green); color: #fff; border-color: var(--garden-green); font-weight: bold; box-shadow: 0 2px 8px rgba(118, 149, 102, 0.3); }
+
+        #demo-desc { font-size: 0.9rem; margin: 0 0 15px 0; color: #666; min-height: 3.5em; line-height: 1.4; text-align: left; background: #faf9f6; padding: 10px 15px; border-radius: 6px; }
+
+        .demo-controls { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; padding: 0 5px; }
+        
+        .target-display { display: flex; align-items: center; font-size: 1rem; color: var(--text-color); }
+        .target-display .target-label { font-size: 0.75rem; color: #888; margin-right: 10px; border: 1px solid #ddd; padding: 2px 8px; border-radius: 12px; background-color: #fafafa; font-weight: bold; }
+        .target-display .target-text { color: var(--garden-green); font-weight: bold; letter-spacing: 0.05em; }
+
+        .speed-control { display: flex; align-items: center; gap: 5px; font-size: 0.85rem; color: #666; }
+        .speed-control select { padding: 4px 8px; border-radius: 20px; border: 1px solid #ddd; background: #fff; color: #444; font-family: inherit; outline: none; cursor: pointer; font-size: 0.85rem; transition: border-color 0.2s; }
+        .speed-control select:hover { border-color: var(--garden-green); }
+
+        .simulation-screen { background-color: #fcfbf9; border: 1px solid #eaeaea; padding: 15px; font-size: 1.6rem; text-align: center; letter-spacing: 0.1em; position: relative; min-height: 1.8em; border-radius: 4px; margin-bottom: 20px; color: var(--text-color); display: flex; justify-content: center; align-items: center; flex-wrap: wrap; }
+        .state { color: var(--accent-color); font-weight: bold; }
+        .mistake { color: #e11d48; font-weight: bold; }
+        
+        .focus-bunsetsu { border-bottom: 4px solid var(--garden-green); background-color: rgba(118, 149, 102, 0.1); padding-bottom: 2px; margin: 0 2px; font-weight: bold; color: #222; }
+        .unfocus-bunsetsu { border-bottom: 2px dashed #999; padding-bottom: 2px; margin: 0 2px; color: #555; }
+        .typing-text { border-bottom: 2px solid #333; padding-bottom: 1px; color: #111; }
+        
+        .cursor { color: var(--text-color); animation: blink 1s steps(1) infinite; }
+        @keyframes blink { 50% { opacity: 0; } }
+        .hide-cursor > .cursor { display: none !important; }
+
+        .ime-popup { position: absolute; top: 100%; left: 50%; transform: translateX(-50%); background: #fff; border: 1px solid #ccc; box-shadow: 0 4px 10px rgba(0,0,0,0.15); font-size: 1rem; text-align: left; display: none; flex-direction: column; padding: 4px 0; z-index: 100; width: 190px; border-radius: 2px; letter-spacing: normal; overflow: hidden; }
+        .ime-page { font-size: 0.75rem; color: var(--garden-green); text-align: center; padding: 4px 0; border-bottom: 1px dashed #ddd; margin-bottom: 2px; font-weight: bold; background-color: #fdfdfc; letter-spacing: 0.05em; }
+        .ime-item { padding: 4px 12px; color: #333; display: flex; align-items: center; justify-content: flex-start; }
+        .ime-item.selected { background: #d0e4f5; }
+        .ime-num { color: #888; margin-right: 12px; font-size: 0.85rem; width: 15px; text-align: right; }
+        .ime-text { flex-grow: 1; }
+        .ime-hint { margin-left: 10px; font-size: 0.7rem; color: #888; background: #f4f4f4; padding: 2px 6px; border-radius: 8px; white-space: nowrap; }
+
+        .ime-popup.suggest-mode { border-color: #999; box-shadow: 2px 2px 6px rgba(0,0,0,0.2); padding-bottom: 0; width: 180px; }
+        .suggest-mode .ime-item { padding: 3px 10px; }
+        .suggest-mode .ime-num { display: none; }
+        .suggest-mode .ime-hint { background: transparent; color: #999; padding: 0; margin-left: auto; font-size: 0.8rem; }
+        .ime-suggest-footer { border-top: 1px solid #ddd; font-size: 0.75rem; color: #666; text-align: center; padding: 3px 0; background-color: #fafafa; margin-top: 2px; width: 100%; letter-spacing: 0; }
+
+        /* キーボードUI */
+        .keyboard-wrapper { display: flex; justify-content: center; gap: 30px; margin-bottom: 15px; }
+        .kb-half { display: grid; grid-template-columns: repeat(6, 36px); grid-gap: 6px; padding: 12px; background-color: #fcfcfc; border-radius: 12px; border: 1px solid #eaeaea; }
+        .key { width: 36px; height: 36px; background-color: var(--key-bg); border: 1px solid var(--key-border); border-radius: 5px; box-shadow: 0 3px 0 #d0d0d0; transition: background-color 0.3s, border-color 0.3s, color 0.3s, transform 0.1s, box-shadow 0.1s; display: flex; justify-content: center; align-items: center; flex-direction: column; }
+        .key .base { display: block; font-size: 0.9rem; font-weight: bold; color: #999; font-family: sans-serif; transition: color 0.3s; }
+        
+        /* 💡 修正点：文字サイズを大きくし、デフォルトの白を削除（下で指定） */
+        .key .jp { display: none; font-size: 0.75rem; font-weight: bold; white-space: nowrap; text-shadow: 0 1px 0 rgba(255,255,255,0.3); }
+        
+        .key.space-key { width: auto; grid-column: 4 / span 3; }
+        .right-hand .key.space-key { grid-column: 1 / span 3; }
+
+        .grp-cons { background-color: #f2f7f1; border-color: #dbe8d6; }
+        .grp-num  { background-color: #fdf5e6; border-color: #f2dec4; }
+        .grp-sym  { background-color: #fcf0f2; border-color: #eed5d9; }
+        .grp-vowel{ background-color: #edf3f7; border-color: #d2e4ee; }
+        .grp-ext  { background-color: #f5f5f5; border-color: #e0e0e0; }
+        .grp-bot  { background-color: #f5f5f5; border-color: #e0e0e0; }
+
+        /* 💡 修正点：アクティブ時の背景色変更＋発光エフェクト＋濃い文字色 */
+        .key.active-L { background-color: var(--accent-color) !important; transform: translateY(3px); box-shadow: 0 0 8px rgba(176, 156, 133, 0.6) !important; border-color: var(--accent-color) !important; }
+        .key.active-R { background-color: var(--garden-green) !important; transform: translateY(3px); box-shadow: 0 0 8px rgba(118, 149, 102, 0.6) !important; border-color: var(--garden-green) !important; }
+        .key.active-L .base, .key.active-R .base { display: none !important; }
+        .key.active-L .jp { display: block !important; color: #3b2f21; } /* 左手：濃いブラウン */
+        .key.active-R .jp { display: block !important; color: #1e3315; } /* 右手：濃いグリーン */
+
+        /* 魔法のハイライト */
+        .mode-number #key-J, .mode-number #key-K, .mode-number #key-L, .mode-number #key-Semi, .mode-number #key-Colon, .mode-number #key-U, .mode-number #key-I, .mode-number #key-O, .mode-number #key-P, .mode-number #key-At { background-color: #ffebd6 !important; border-color: #ffc480 !important; }
+        .mode-number #key-J .base, .mode-number #key-K .base, .mode-number #key-L .base, .mode-number #key-Semi .base, .mode-number #key-Colon .base, .mode-number #key-U .base, .mode-number #key-I .base, .mode-number #key-O .base, .mode-number #key-P .base, .mode-number #key-At .base { color: #d97706 !important; }
+        .mode-symbol #key-J, .mode-symbol #key-K, .mode-symbol #key-L, .mode-symbol #key-Semi, .mode-symbol #key-I, .mode-symbol #key-O { background-color: #fce6eb !important; border-color: #f1b3bc !important; }
+        .mode-symbol #key-J .base, .mode-symbol #key-K .base, .mode-symbol #key-L .base, .mode-symbol #key-Semi .base, .mode-symbol #key-I .base, .mode-symbol #key-O .base { color: #be123c !important; }
+        .mode-conversion #key-I, .mode-conversion #key-O, .mode-conversion #key-J, .mode-conversion #key-K, .mode-conversion #key-L, .mode-conversion #key-N, .mode-conversion #key-M { background-color: #d4eedc !important; border-color: #a8d9b8 !important; }
+        .mode-conversion #key-I .base, .mode-conversion #key-O .base, .mode-conversion #key-J .base, .mode-conversion #key-K .base, .mode-conversion #key-L .base, .mode-conversion #key-N .base, .mode-conversion #key-M .base { color: #15803d !important; }
+
+        .demo-labels { display: flex; justify-content: center; gap: 100px; font-size: 0.8rem; color: #888; margin-top: 0; }
+        footer { text-align: center; padding: 40px 20px; background-color: #fff; font-size: 0.9rem; color: #888; border-top: 1px solid #eaeaea; margin-top: 40px; }
+    </style>
+</head>
+<body>
+
+    <header class="hero">
+        <h1>花咲く言葉</h1>
+        <p class="subtitle">Hanasaku Words (HSW配列)</p>
+        <p class="catchphrase">
+            ローマ字の「綴り」を捨て、日本語の「音」を重ねる。<br>
+            入力から変換まで、<span>ホームポジションは崩れない。</span>
+        </p>
+        <p class="poetic-intro">
+            キーボードの上に、自分だけの庭を作ろう。<br>
+            左手でそっと子音の種をまき、右手で母音の水をやる。<br>
+            思考をダイレクトに言葉にする、ロジカルで優雅な新しい配列です。
+        </p>
+    </header>
+
+    <div class="section" style="padding-bottom: 0;">
+        <div class="tech-summary">
+            <h3>【30秒で分かる：花咲く言葉の「咲かせ方」】</h3>
+            
+            <ul class="tech-list">
+                <li class="tech-item"><span class="hand-label left-hand-label">左手</span><strong>① 子音行(種)</strong><span class="desc">行を選択</span></li>
+                <li class="tech-item"><span class="hand-label right-hand-label">右手</span><strong>② 母音段(水)</strong><span class="desc">段で開花</span></li>
+                <li class="tech-item"><span class="hand-label left-hand-label">左手(親指)</span><strong>③ 変換・候補</strong><span class="desc">スムーズに選択</span></li>
+                <li class="tech-item"><span class="hand-label right-hand-label">右手(定位置)</span><strong>④ 編集・操作</strong><span class="desc">手首を固定</span></li>
+            </ul>
+            
+            <div class="tech-example-group">
+                <div class="tech-example-box">
+                    <p class="ex-title">【①② 入力】音を重ねる</p>
+                    <div class="example-row">
+                        <span class="ex-key left-key">D<br><small>タ行</small></span>
+                        <span class="ex-plus">＋</span>
+                        <span class="ex-key left-key">F<br><small>濁音</small></span>
+                        <span class="ex-plus">＋</span>
+                        <span class="ex-key right-key">L<br><small>う段</small></span>
+                        <span class="ex-equal">＝</span>
+                        <span class="ex-result">づ</span>
+                    </div>
+                    <div class="example-row">
+                        <span class="ex-key left-key">W<br><small>ハ行</small></span>
+                        <span class="ex-plus">＋</span>
+                        <span class="ex-key right-key">L<br><small>う段</small></span>
+                        <span class="ex-plus">＋</span>
+                        <span class="ex-key right-key">I<br><small>あ段</small></span>
+                        <span class="ex-equal">＝</span>
+                        <span class="ex-result">ふぁ</span>
+                    </div>
+                </div>
+                
+                <div class="tech-example-box">
+                    <p class="ex-title">【③④ 変換・編集】手首を固定</p>
+                    <div class="op-graphic">
+                        <div class="op-part">
+                            <span class="op-btn thumb-btn">Space</span>
+                            <small>左手(親指)</small>
+                        </div>
+                        <div class="op-center">➔</div>
+                        <div class="op-part">
+                            <div class="mini-key-grid">
+                                <div class="mini-key-row">
+                                    <span class="m-key"><span class="m-char">I</span><span class="m-desc">前項</span></span>
+                                    <span class="m-key"><span class="m-char">O</span><span class="m-desc">次項</span></span>
+                                </div>
+                                <div class="mini-key-row">
+                                    <span class="m-key"><span class="m-char">J</span><span class="m-desc">次文節</span></span>
+                                    <span class="m-key"><span class="m-char">K</span><span class="m-desc">文節縮</span></span>
+                                    <span class="m-key"><span class="m-char">L</span><span class="m-desc">文節伸</span></span>
+                                </div>
+                            </div>
+                            <small>右手(ホームポジション)</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <p style="font-size: 0.85rem; text-align: center; margin-top: 20px; color: #666;">
+                <strong>「左手 ➔ 右手 ➔ 左手 ➔ 右手」</strong>という流れるような交互のリズムで、<br>入力から変換まで手首を定位置から一切動かさずに完結する、実用性を極めた日本語入力インターフェース。
+            </p>
+        </div>
+    </div>
+
+    <section class="section" style="padding-top: 0;">
+        <div class="demo-box" id="demo-section">
+            <div id="demo-inner">
+                <h3 id="demo-title">打鍵の風景：指先で言葉を紡ぐ</h3>
+                
+                <div class="demo-tabs">
+                    <button class="tab-btn active" data-scenario="tab1">１</button>
+                    <button class="tab-btn" data-scenario="tab2">２</button>
+                    <button class="tab-btn" data-scenario="tab3">３</button>
+                    <button class="tab-btn" data-scenario="tab4">４</button>
+                    <button class="tab-btn" data-scenario="tab5">５</button>
+                    <button class="tab-btn" data-scenario="tab6">６</button>
+                    <button class="tab-btn" data-scenario="tab7">７</button>
+                    <button class="tab-btn" data-scenario="tab8">８</button>
+                    <button class="tab-btn" data-scenario="tab9">９</button>
+                    <button class="tab-btn" data-scenario="tab10">１０</button>
+                </div>
+
+                <p id="demo-desc"></p>
+
+                <div class="demo-controls">
+                    <div class="target-display">
+                        <span class="target-label">完成文</span>
+                        <span id="target-text" class="target-text"></span>
+                    </div>
+                    <div class="speed-control">
+                        <label for="playback-speed">▶ スピード：</label>
+                        <select id="playback-speed">
+                            <option value="0.5">ゆっくり (x0.5)</option>
+                            <option value="1" selected>標準 (x1.0)</option>
+                            <option value="1.5">すこし早い (x1.5)</option>
+                            <option value="2">はやい (x2.0)</option>
+                            <option value="4">超はやい (x4.0)</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="simulation-screen" id="sim-screen">
+                    <span id="sim-text"></span><span class="cursor">｜</span>
+                    <div id="ime-popup" class="ime-popup"></div>
+                </div>
+
+                <div class="keyboard-wrapper" id="keyboard-wrapper">
+                    <div class="kb-half left-hand">
+                        <div class="key"></div>
+                        <div class="key grp-cons" id="key-Q"><span class="base">Q</span><span class="jp">ァ行/ゔ</span></div>
+                        <div class="key grp-cons" id="key-W"><span class="base">W</span><span class="jp">ハ行</span></div>
+                        <div class="key grp-cons" id="key-E"><span class="base">E</span><span class="jp">ナ行/マ</span></div>
+                        <div class="key grp-cons" id="key-R"><span class="base">R</span><span class="jp">ラ行/半</span></div>
+                        <div class="key"></div>
+
+                        <div class="key grp-ext" id="key-Caps"><span class="base"></span><span class="jp">取消</span></div>
+                        <div class="key grp-cons" id="key-A"><span class="base">A</span><span class="jp">サ行</span></div>
+                        <div class="key grp-cons" id="key-S"><span class="base">S</span><span class="jp">カ行</span></div>
+                        <div class="key grp-cons" id="key-D"><span class="base">D</span><span class="jp">タ行</span></div>
+                        <div class="key grp-cons" id="key-F"><span class="base">F</span><span class="jp">ア行/濁</span></div>
+                        <div class="key grp-num" id="key-G"><span class="base">G</span><span class="jp">ス</span></div>
+
+                        <div class="key"></div>
+                        <div class="key grp-bot" id="key-Z"><span class="base">Z</span><span class="jp">半カ</span></div>
+                        <div class="key grp-bot" id="key-X"><span class="base">X</span><span class="jp">全カ</span></div>
+                        <div class="key grp-bot" id="key-C"><span class="base">C</span><span class="jp">全ひ</span></div>
+                        <div class="key grp-sym" id="key-V"><span class="base">V</span><span class="jp">キ</span></div>
+                        <div class="key"></div>
+
+                        <div class="key space-key" id="key-Space-L"><span class="base">Space</span><span class="jp">変換/次</span></div>
+                    </div>
+                    <div class="kb-half right-hand">
+                        <div class="key"></div>
+                        <div class="key" id="key-U"><span class="base"></span><span class="jp">6</span></div>
+                        <div class="key grp-vowel" id="key-I"><span class="base">I</span><span class="jp">あ段/7</span></div>
+                        <div class="key grp-vowel" id="key-O"><span class="base">O</span><span class="jp">え段/8</span></div>
+                        <div class="key grp-ext" id="key-P"><span class="base">P</span><span class="jp">ー/9</span></div>
+                        <div class="key" id="key-At"><span class="base"></span><span class="jp">0</span></div>
+
+                        <div class="key"></div>
+                        <div class="key grp-vowel" id="key-J"><span class="base">J</span><span class="jp">い段/1</span></div>
+                        <div class="key grp-vowel" id="key-K"><span class="base">K</span><span class="jp">お段/2</span></div>
+                        <div class="key grp-vowel" id="key-L"><span class="base">L</span><span class="jp">う段/3</span></div>
+                        <div class="key grp-ext" id="key-Semi"><span class="base">;</span><span class="jp">ん/4</span></div>
+                        <div class="key grp-ext" id="key-Colon"><span class="base">:</span><span class="jp">っ/5</span></div>
+
+                        <div class="key"></div>
+                        <div class="key grp-bot" id="key-N"><span class="base">N</span><span class="jp">←</span></div>
+                        <div class="key grp-bot" id="key-M"><span class="base">M</span><span class="jp">確定</span></div>
+                        <div class="key"></div><div class="key"></div><div class="key"></div>
+
+                        <div class="key space-key" id="key-Space-R"><span class="base">変換</span><span class="jp">変換</span></div>
+                    </div>
+                </div>
+                <div class="demo-labels">
+                    <span>左手（行の指定） / 親指（Space）</span>
+                    <span>右手（段の指定・文節操作） / 親指（変換）</span>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="section" style="padding-top: 20px;">
+        <div class="antithesis-box">
+            <h3>いまのキーボード、実は「思考」を邪魔していませんか？</h3>
+            <p style="text-align: center; color: #555; margin-bottom: 30px;">私たちが普段、当たり前のように使っている「ローマ字入力」。<br>実はこれ、頭に浮かんだ日本語の「音」を、一度「アルファベットの綴り」に翻訳してから打ち込む、とても不自然な作業です。</p>
+            
+            <div class="anti-point">
+                <h4>① 脳を疲れさせる「不自然なローマ字の暗記」</h4>
+                <p>たとえば「づ」と打ちたいとき、私たちは発音とは無関係に「D・U」と指を動かします。「を」は「W・O」。これらは人間の自然な口の動きや音のつながりではなく、ただシステム側の都合で暗記させられた「例外ルール」です。この一瞬の脳内翻訳作業が、知らず知らずのうちに思考のスピードにブレーキをかけています。</p>
+            </div>
+            
+            <div class="anti-point">
+                <h4>② 集中を途切れさせる「過酷な指の移動」</h4>
+                <p>さらに、物理的な指の移動も大きな負担です。文字を消すための「Backspace」や、変換を確定する「Enter」は、右手の小指を限界まで伸ばさなければ届きません。文節を調整するための「矢印キー」に至っては、手のひらごとホームポジションから離す必要があります。また、「N」や「M」、「、」「。」などの下段のキーも、指を不自然に曲げ込まないと押しづらい場所にあります。そのたびに手のひらの位置は崩れ、せっかく紡いでいた言葉の糸がプツリと途切れてしまいます。</p>
+            </div>
+
+            <p class="anti-conclusion">
+                言葉を形にするための道具なのに、システムやキー配置の都合に人間が無理に合わせて疲弊している。<br>
+                この違和感を根本から解決するために生まれたのが、花咲く言葉の「開花の理」と「四つの所作」です。
+            </p>
+        </div>
+
+        <h2>実務を加速させる、圧倒的な「自由」</h2>
+        <table class="comp-table">
+            <thead>
+                <tr>
+                    <th>比較項目</th>
+                    <th>一般的なローマ字入力</th>
+                    <th class="highlight-row">HSW配列 (花咲く言葉)</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>打鍵の思考</td>
+                    <td>英字綴りへの翻訳</td>
+                    <td class="check-mark">発音の直接入力（音の足し算）</td>
+                </tr>
+                <tr>
+                    <td>覚える量</td>
+                    <td>多い（例外綴り含む）</td>
+                    <td class="check-mark">少ない（極めて規則的）</td>
+                </tr>
+                <tr>
+                    <td>ホームポジション</td>
+                    <td>頻繁に崩れる</td>
+                    <td class="check-mark">ほぼ完全に固定</td>
+                </tr>
+                <tr>
+                    <td>指の総移動距離</td>
+                    <td>大きい（疲れやすい）</td>
+                    <td class="check-mark">極めて小さい（疲れにくい）</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <h3 style="text-align: center; color: var(--garden-green); margin-top: 60px;">習得までのロードマップ</h3>
+        <div class="roadmap">
+            <div class="step">
+                <span class="step-time">30分</span>
+                <span class="step-desc">基本の「理」を理解し、<br>50音が打てる。</span>
+            </div>
+            <div class="step">
+                <span class="step-time">3時間</span>
+                <span class="step-desc">手元を見ずに、<br>日常会話が打てる。</span>
+            </div>
+            <div class="step">
+                <span class="step-time">1週間</span>
+                <span class="step-desc">不自由なく、<br>思考のままにタイピングできる。</span>
+            </div>
+        </div>
+
+        <h2 style="margin-top: 80px;">例外なき論理と、安らぐ手のひら</h2>
+        
+        <h3 style="color: var(--garden-green); text-align: center; margin-bottom: 25px;">【花咲く言葉の「開花の理（ことわり）」】</h3>
+        <p style="text-align: center; color: #555; margin-bottom: 30px;">言葉を「アルファベットの綴り」として丸暗記するのではなく、人間の自然な「口の動き（発音）」をそのまま指先の足し算に変換します。</p>
+
+        <div class="logic-grid">
+            <div class="logic-rule">
+                <div class="logic-rule-title">その壱：濁音の変化</div>
+                <p>「サ」の種に「濁点（F）」を足すと、「ザ」に変わる。全行共通のシンプルな法則です。（例外に思える「づ」も、タ行＋濁点＋う段で自然に作れます）</p>
+            </div>
+            <div class="logic-rule">
+                <div class="logic-rule-title">その弐：拗音の足し算</div>
+                <p>なぜ「じ」に「あ段（I）」を重ねると「じゃ」になるのでしょうか？ それは、「じ」の口の形のまま「あ」と発音すると、自然に「じゃ」の音になるからです。綴りの暗記ではなく、口の動きの連続をそのまま入力にします。</p>
+            </div>
+            <div class="logic-rule">
+                <div class="logic-rule-title">その参：わ行の足し算</div>
+                <p>同じように、「う」の口の形から「あ」と発音すると自然に「わ」になり、「お」と発音すれば「うぉ（を）」になります。だから「う」の響き（つぼみ）に、「あ段（I）」や「お段（K）」の水を重ねるだけで、正しい花が咲くのです。</p>
+            </div>
+        </div>
+        <p class="logic-conclusion">暗記は最小限。この直感的な「音の足し算」により、ユーザー視点では例外を感じない自然な設計ですべての音を網羅します。</p>
+
+        <h3 style="color: var(--garden-green); text-align: center; margin-bottom: 30px;">【言葉の庭を育てる、四つの所作】</h3>
+        <p style="text-align: center; color: #555; margin-bottom: 40px;">さらに「花咲く言葉」は、基本の入力を押しやすい中段・上段に集約し、指の不自然な移動を極限まで減らしました。「30秒で分かる」で紹介した4つのステップは、まるで庭を育てるような美しい所作として完結します。</p>
+
+        <div class="feature">
+            <div class="feature-number">壱</div>
+            <div class="feature-text">
+                <h3>種をまく（左手・子音行）</h3>
+                <p>まずは左手で行（子音）を選びます。画面には即座に「カ」や「サ」といった言葉のつぼみが現れ、次にどの音が咲くのかを視覚的に確かめられます。</p>
+            </div>
+        </div>
+        <div class="feature">
+            <div class="feature-number">弐</div>
+            <div class="feature-text">
+                <h3>水を与える（右手・母音段）</h3>
+                <p>一番自然な位置にある右手のキーで、あいうえおの段（母音）を与えます。左手から右手へと流れる交互の動きが、淀みないリズムを生み出します。</p>
+            </div>
+        </div>
+        <div class="feature">
+            <div class="feature-number">参</div>
+            <div class="feature-text">
+                <h3>風を送る（左親指・変換）</h3>
+                <p>言葉が咲いたら、そのまま左手の親指（Spaceキー）で変換の風を送ります。手首を動かさずに、自然な流れで候補をスムーズに選択できます。</p>
+            </div>
+        </div>
+        <div class="feature">
+            <div class="feature-number">四</div>
+            <div class="feature-text">
+                <h3>庭を整える（右手定位置・編集）</h3>
+                <p>文節の移動や伸縮は、すべて右手のホームポジション（J・K・Lなど）で行います。遠い矢印キーへ手を伸ばすことなく、咲いた言葉を思い通りに剪定（編集）し、そのまま確定させることができます。</p>
+            </div>
+        </div>
+    </section>
+
+    <section class="section">
+        <h2>名前に込めた願い</h2>
+        <div class="origin-text">
+            <p>これまでのキーボード入力には、文字を「叩く」「打鍵する」という、少し攻撃的で無機質なイメージがありました。</p>
+            <p>パソコンに向かう時間は、ただ文字のデータを打ち込むだけの作業ではないはずです。<br>
+            キーボードは、あなたの頭の中にある思考や感情を、言葉として形にするための「庭」であってほしい。<br>
+            機械に触れる心理的なハードルを下げ、自分を表現する時間に温かさを添えたい。</p>
+            <p>そんな願いから、「打つ」という行為を「花が咲く」というポジティブな表現に変え、「花咲く言葉」と名付けました。</p>
+            <p>もし、「どうして『咲く』って言うの？」と聞かれたら、こう答えます。</p>
+            
+            <div class="quote">
+                「『サ』の種に濁点を与えて『ザ』に芽吹き、<br>『い』と『あ』の水を重ねて注ぐと、自然に『じゃ』の花が咲くでしょう？」
+            </div>
+            <p>音が重なり、言葉が育ち、画面の上に美しく咲き誇る。<br>あなたの心にある言葉の種を、この庭で咲かせてみませんか。</p>
+        </div>
+    </section>
+
+    <footer>
+        <p>日本語入力配列 - 花咲く言葉 (HSW)</p>
+    </footer>
+
+    <script>
+        const strokeDict = {
+            'あ': [['F','ア行','L','ア'], ['I','あ段','R','あ']],
+            'い': [['F','ア行','L','ア'], ['J','い段','R','い']],
+            'う': [['F','ア行','L','ア'], ['L','う段','R','う']],
+            'え': [['F','ア行','L','ア'], ['O','え段','R','え']],
+            'お': [['F','ア行','L','ア'], ['K','お段','R','お']],
+            'か': [['S','カ行','L','カ'], ['I','あ段','R','か']],
+            'き': [['S','カ行','L','カ'], ['J','い段','R','き']],
+            'く': [['S','カ行','L','カ'], ['L','う段','R','く']],
+            'け': [['S','カ行','L','カ'], ['O','え段','R','け']],
+            'こ': [['S','カ行','L','カ'], ['K','お段','R','こ']],
+            'さ': [['A','サ行','L','サ'], ['I','あ段','R','さ']],
+            'し': [['A','サ行','L','サ'], ['J','い段','R','し']],
+            'す': [['A','サ行','L','サ'], ['L','う段','R','す']],
+            'せ': [['A','サ行','L','サ'], ['O','え段','R','せ']],
+            'そ': [['A','サ行','L','サ'], ['K','お段','R','そ']],
+            'た': [['D','タ行','L','タ'], ['I','あ段','R','た']],
+            'ち': [['D','タ行','L','タ'], ['J','い段','R','ち']],
+            'つ': [['D','タ行','L','タ'], ['L','う段','R','つ']],
+            'て': [['D','タ行','L','タ'], ['O','え段','R','て']],
+            'と': [['D','タ行','L','タ'], ['K','お段','R','と']],
+            'な': [['E','ナ行','L','ナ'], ['I','あ段','R','な']],
+            'に': [['E','ナ行','L','ナ'], ['J','い段','R','に']],
+            'ぬ': [['E','ナ行','L','ナ'], ['L','う段','R','ぬ']],
+            'ね': [['E','ナ行','L','ナ'], ['O','え段','R','ね']],
+            'の': [['E','ナ行','L','ナ'], ['K','お段','R','の']],
+            'は': [['W','ハ行','L','ハ'], ['I','あ段','R','は']],
+            'ひ': [['W','ハ行','L','ハ'], ['J','い段','R','ひ']],
+            'ふ': [['W','ハ行','L','ハ'], ['L','う段','R','ふ']],
+            'へ': [['W','ハ行','L','ハ'], ['O','え段','R','へ']],
+            'ほ': [['W','ハ行','L','ハ'], ['K','お段','R','ほ']],
+            
+            'ま': [['E','ナ行','L','ナ'], ['F','マ行','L','マ'], ['I','あ段','R','ま']],
+            'み': [['E','ナ行','L','ナ'], ['F','マ行','L','マ'], ['J','い段','R','み']],
+            'む': [['E','ナ行','L','ナ'], ['F','マ行','L','マ'], ['L','う段','R','む']],
+            'め': [['E','ナ行','L','ナ'], ['F','マ行','L','マ'], ['O','え段','R','め']],
+            'も': [['E','ナ行','L','ナ'], ['F','マ行','L','マ'], ['K','お段','R','も']],
+
+            'ら': [['R','ラ行','L','ラ'], ['I','あ段','R','ら']],
+            'り': [['R','ラ行','L','ラ'], ['J','い段','R','り']],
+            'る': [['R','ラ行','L','ラ'], ['L','う段','R','る']],
+            'れ': [['R','ラ行','L','ラ'], ['O','え段','R','れ']],
+            'ろ': [['R','ラ行','L','ラ'], ['K','お段','R','ろ']],
+
+            'が': [['S','カ行','L','カ'], ['F','濁音','L','ガ'], ['I','あ段','R','が']],
+            'ぎ': [['S','カ行','L','カ'], ['F','濁音','L','ガ'], ['J','い段','R','ぎ']],
+            'ぐ': [['S','カ行','L','カ'], ['F','濁音','L','ガ'], ['L','う段','R','ぐ']],
+            'げ': [['S','カ行','L','カ'], ['F','濁音','L','ガ'], ['O','え段','R','げ']],
+            'ご': [['S','カ行','L','カ'], ['F','濁音','L','ガ'], ['K','お段','R','ご']],
+            'ざ': [['A','サ行','L','サ'], ['F','濁音','L','ザ'], ['I','あ段','R','ざ']],
+            'じ': [['A','サ行','L','サ'], ['F','濁音','L','ザ'], ['J','い段','R','じ']],
+            'ず': [['A','サ行','L','サ'], ['F','濁音','L','ザ'], ['L','う段','R','ず']],
+            'ぜ': [['A','サ行','L','サ'], ['F','濁音','L','ザ'], ['O','え段','R','ぜ']],
+            'ぞ': [['A','サ行','L','サ'], ['F','濁音','L','ザ'], ['K','お段','R','ぞ']],
+            'だ': [['D','タ行','L','タ'], ['F','濁音','L','ダ'], ['I','あ段','R','だ']],
+            'ぢ': [['D','タ行','L','タ'], ['F','濁音','L','ダ'], ['J','い段','R','ぢ']],
+            'づ': [['D','タ行','L','タ'], ['F','濁音','L','ダ'], ['L','う段','R','づ']],
+            'で': [['D','タ行','L','タ'], ['F','濁音','L','ダ'], ['O','え段','R','で']],
+            'ど': [['D','タ行','L','タ'], ['F','濁音','L','ダ'], ['K','お段','R','ど']],
+            'ば': [['W','ハ行','L','ハ'], ['F','濁音','L','バ'], ['I','あ段','R','ば']],
+            'び': [['W','ハ行','L','ハ'], ['F','濁音','L','バ'], ['J','い段','R','び']],
+            'ぶ': [['W','ハ行','L','ハ'], ['F','濁音','L','バ'], ['L','う段','R','ぶ']],
+            'べ': [['W','ハ行','L','ハ'], ['F','濁音','L','バ'], ['O','え段','R','べ']],
+            'ぼ': [['W','ハ行','L','ハ'], ['F','濁音','L','バ'], ['K','お段','R','ぼ']],
+            
+            'ぱ': [['W','ハ行','L','ハ'], ['R','半濁','L','パ'], ['I','あ段','R','ぱ']],
+            'ぴ': [['W','ハ行','L','ハ'], ['R','半濁','L','パ'], ['J','い段','R','ぴ']],
+            'ぷ': [['W','ハ行','L','ハ'], ['R','半濁','L','パ'], ['L','う段','R','ぷ']],
+            'ぺ': [['W','ハ行','L','ハ'], ['R','半濁','L','パ'], ['O','え段','R','ぺ']],
+            'ぽ': [['W','ハ行','L','ハ'], ['R','半濁','L','パ'], ['K','お段','R','ぽ']],
+            
+            'や': [['F','ア行','L','ア'], ['J','い段','R','い'], ['I','あ段','R','や']],
+            'ゆ': [['F','ア行','L','ア'], ['J','い段','R','い'], ['L','う段','R','ゆ']],
+            'よ': [['F','ア行','L','ア'], ['J','い段','R','い'], ['K','お段','R','よ']],
+            'わ': [['F','ア行','L','ア'], ['L','う段','R','う'], ['I','あ段','R','わ']],
+            'を': [['F','ア行','L','ア'], ['L','う段','R','う'], ['K','お段','R','を']],
+            
+            'きゃ': [['S','カ行','L','カ'], ['J','い段','R','き'], ['I','あ段','R','きゃ']],
+            'きゅ': [['S','カ行','L','カ'], ['J','い段','R','き'], ['L','う段','R','きゅ']],
+            'きょ': [['S','カ行','L','カ'], ['J','い段','R','き'], ['K','お段','R','きょ']],
+            'しゃ': [['A','サ行','L','サ'], ['J','い段','R','し'], ['I','あ段','R','しゃ']],
+            'しゅ': [['A','サ行','L','サ'], ['J','い段','R','し'], ['L','う段','R','しゅ']],
+            'しょ': [['A','サ行','L','サ'], ['J','い段','R','し'], ['K','お段','R','しょ']],
+            'ちゃ': [['D','タ行','L','タ'], ['J','い段','R','ち'], ['I','あ段','R','ちゃ']],
+            'ちゅ': [['D','タ行','L','タ'], ['J','い段','R','ち'], ['L','う段','R','ちゅ']],
+            'ちょ': [['D','タ行','L','タ'], ['J','い段','R','ち'], ['K','お段','R','ちょ']],
+            'にゃ': [['E','ナ行','L','ナ'], ['J','い段','R','に'], ['I','あ段','R','にゃ']],
+            'ひゃ': [['W','ハ行','L','ハ'], ['J','い段','R','ひ'], ['I','あ段','R','ひゃ']],
+            'ひょ': [['W','ハ行','L','ハ'], ['J','い段','R','ひ'], ['K','お段','R','ひょ']],
+            
+            'みゃ': [['E','ナ行','L','ナ'], ['F','マ行','L','マ'], ['J','い段','R','み'], ['I','あ段','R','みゃ']],
+            'みゅ': [['E','ナ行','L','ナ'], ['F','マ行','L','マ'], ['J','い段','R','み'], ['L','う段','R','みゅ']],
+            'みょ': [['E','ナ行','L','ナ'], ['F','マ行','L','マ'], ['J','い段','R','み'], ['K','お段','R','みょ']],
+            
+            'りゃ': [['R','ラ行','L','ラ'], ['J','い段','R','り'], ['I','あ段','R','りゃ']],
+            
+            'ぎゃ': [['S','カ行','L','カ'], ['F','濁音','L','ガ'], ['J','い段','R','ぎ'], ['I','あ段','R','ぎゃ']],
+            'じゃ': [['A','サ行','L','サ'], ['F','濁音','L','ザ'], ['J','い段','R','じ'], ['I','あ段','R','じゃ']],
+            'じゅ': [['A','サ行','L','サ'], ['F','濁音','L','ザ'], ['J','い段','R','じ'], ['L','う段','R','じゅ']],
+            'じょ': [['A','サ行','L','サ'], ['F','濁音','L','ザ'], ['J','い段','R','じ'], ['K','お段','R','じょ']],
+            'びゃ': [['W','ハ行','L','ハ'], ['F','濁音','L','バ'], ['J','い段','R','び'], ['I','あ段','R','びゃ']],
+            
+            'ぴゃ': [['W','ハ行','L','ハ'], ['R','半濁','L','パ'], ['J','い段','R','ぴ'], ['I','あ段','R','ぴゃ']],
+            'ぴゅ': [['W','ハ行','L','ハ'], ['R','半濁','L','パ'], ['J','い段','R','ぴ'], ['L','う段','R','ぴゅ']],
+            'ぴょ': [['W','ハ行','L','ハ'], ['R','半濁','L','パ'], ['J','い段','R','ぴ'], ['K','お段','R','ぴょ']],
+            
+            'てぃ': [['D','タ行','L','タ'], ['O','え段','R','て'], ['J','い段','R','てぃ']],
+            'ふぁ': [['W','ハ行','L','ハ'], ['L','う段','R','ふ'], ['I','あ段','R','ふぁ']],
+            
+            'ん': [['Semi','ん','R','ん']],
+            'っ': [['Colon','っ','R','っ']],
+            'ー': [['P','ー','R','ー']],
+            
+            '、': [['V','キ','L','キ'], ['J','、','R','、']],
+            '。': [['V','キ','L','キ'], ['K','。','R','。']],
+            '！': [['V','キ','L','キ'], ['L','！','R','！']],
+            '？': [['V','キ','L','キ'], ['Semi','？','R','？']],
+            
+            '1': [['G','ス','L','ス'], ['J','1','R','1']],
+            '2': [['G','ス','L','ス'], ['K','2','R','2']],
+            '3': [['G','ス','L','ス'], ['L','3','R','3']],
+            '4': [['G','ス','L','ス'], ['Semi','4','R','4']],
+            '5': [['G','ス','L','ス'], ['Colon','5','R','5']],
+            '6': [['G','ス','L','ス'], ['U','6','R','6']],
+            '7': [['G','ス','L','ス'], ['I','7','R','7']],
+            '8': [['G','ス','L','ス'], ['O','8','R','8']],
+            '9': [['G','ス','L','ス'], ['P','9','R','9']],
+            '0': [['G','ス','L','ス'], ['At','0','R','0']]
+        };
+
+        function buildTypingSteps(segments) {
+            let steps = [{t: "", k: null, kbMode: 'normal'}];
+            let confirmedText = ""; 
+
+            for(let s=0; s<segments.length; s++) {
+                let seg = segments[s];
+                let currentHira = "";
+
+                let i = 0;
+                while(i < seg.h.length) {
+                    let c = seg.h[i];
+                    if (i+1 < seg.h.length && "ゃゅょぁぃぅぇぉ".includes(seg.h[i+1])) {
+                        c += seg.h[i+1];
+                        i++;
+                    } else if (c === 'て' && i+1 < seg.h.length && seg.h[i+1] === 'ぃ') {
+                        c += 'ぃ';
+                        i++;
+                    } else if (c === 'ふ' && i+1 < seg.h.length && seg.h[i+1] === 'ぁ') {
+                        c += 'ぁ';
+                        i++;
+                    }
+                    
+                    let strokes = strokeDict[c];
+                    if (strokes) {
+                        for(let stroke of strokes) {
+                            let mode = 'normal';
+                            if (stroke[2] === 'L') {
+                                if (stroke[3] === 'ス') mode = 'number';
+                                else if (stroke[3] === 'キ') mode = 'symbol';
+                                
+                                steps.push({
+                                    t: confirmedText + currentHira + "<span class='state'>" + stroke[3] + "</span>",
+                                    k: "key-" + stroke[0], h: "L", label: stroke[1], kbMode: mode
+                                });
+                            } else {
+                                mode = steps[steps.length-1].kbMode;
+                                steps.push({
+                                    t: confirmedText + currentHira + stroke[3],
+                                    k: "key-" + stroke[0], h: "R", label: stroke[1], kbMode: mode
+                                });
+                            }
+                        }
+                        currentHira += c;
+                    } else {
+                        currentHira += c;
+                        steps.push({
+                            t: confirmedText + currentHira,
+                            k: null, h: null, label: null, kbMode: 'normal'
+                        });
+                    }
+                    i++;
+                }
+                
+                steps.push({ 
+                    t: confirmedText + "<span class='focus-bunsetsu'>" + seg.c + "</span>", 
+                    k: "key-Space-L", 
+                    h: "L", 
+                    label: "変換",
+                    kbMode: "conversion" 
+                });
+                
+                confirmedText += seg.c;
+            }
+            
+            steps.push({ t: confirmedText, k: null, h: null, kbMode: 'normal' });
+            steps.push({ t: confirmedText, k: null, h: null, kbMode: 'normal' });
+            return steps;
+        }
+
+        let s3_tail = buildTypingSteps([{h:"、", c:"、"}, {h:"ぱっと", c:"ぱっと"}, {h:"すいてきが", c:"水滴が"}, {h:"はじけとぶ。", c:"弾け飛ぶ。"}]);
+        s3_tail.shift();
+        s3_tail.forEach(step => { step.t = "バラが咲き" + step.t; });
+
+        let s5_tail = buildTypingSteps([{h:"、", c:"、"}, {h:"うちゅうの", c:"宇宙の"}, {h:"ひょうじょうを", c:"表情を"}, {h:"みせる。", c:"見せる。"}]);
+        s5_tail.shift();
+        s5_tail.forEach(step => { step.t = "華奢なつぼみが" + step.t; });
+
+        let s7_manual = [
+            { t: "さあ、種をまこう！どんなはながさくかな？", k: null, h: null, kbMode: "normal" },
+            { t: "さあ、種をまこう！<span class='focus-bunsetsu'>どんな</span><span class='unfocus-bunsetsu'>端が</span><span class='unfocus-bunsetsu'>裂くかな？</span>", k: "key-Space-L", h: "L", label: "変換", kbMode: "conversion" },
+            { t: "さあ、種をまこう！<span class='unfocus-bunsetsu'>どんな</span><span class='focus-bunsetsu'>端が</span><span class='unfocus-bunsetsu'>裂くかな？</span>", k: "key-J", h: "R", label: "次文節", kbMode: "conversion" },
+            { t: "さあ、種をまこう！<span class='unfocus-bunsetsu'>どんな</span><span class='focus-bunsetsu'>鼻がさ</span><span class='unfocus-bunsetsu'>区かな？</span>", k: "key-L", h: "R", label: "文節伸", kbMode: "conversion" },
+            { t: "さあ、種をまこう！<span class='unfocus-bunsetsu'>どんな</span><span class='focus-bunsetsu'>華が咲く</span><span class='unfocus-bunsetsu'>かな？</span>", k: "key-L", h: "R", label: "文節伸", kbMode: "conversion" },
+            { t: "さあ、種をまこう！<span class='unfocus-bunsetsu'>どんな</span><span class='focus-bunsetsu'>華が咲く</span><span class='unfocus-bunsetsu'>かな？</span>", k: "key-Space-L", h: "L", label: "候補", kbMode: "conversion",
+              ime: { page: "1/2 ページ 🔽", startIndex: 1, items: [{text: "華が咲く"}, {text: "鼻が咲く", hint: "別の漢字"}, {text: "離が咲く"}, {text: "ハナが咲く"}], sel: 0 } },
+            { t: "さあ、種をまこう！<span class='unfocus-bunsetsu'>どんな</span><span class='focus-bunsetsu'>華がさく</span><span class='unfocus-bunsetsu'>かな？</span>", k: "key-O", h: "R", label: "次頁", kbMode: "conversion",
+              ime: { page: "2/2 ページ 🔼", startIndex: 5, items: [{text: "華がさく"}, {text: "花がさく"}, {text: "花が咲く", hint: "植物"}, {text: "はながさく", hint: "ひらがな"}], sel: 0 } },
+            { t: "さあ、種をまこう！<span class='unfocus-bunsetsu'>どんな</span><span class='focus-bunsetsu'>花がさく</span><span class='unfocus-bunsetsu'>かな？</span>", k: "key-Space-L", h: "L", label: "次候補", kbMode: "conversion",
+              ime: { page: "2/2 ページ 🔼", startIndex: 5, items: [{text: "華がさく"}, {text: "花がさく"}, {text: "花が咲く", hint: "植物"}, {text: "はながさく", hint: "ひらがな"}], sel: 1 } },
+            { t: "さあ、種をまこう！<span class='unfocus-bunsetsu'>どんな</span><span class='focus-bunsetsu'>花が咲く</span><span class='unfocus-bunsetsu'>かな？</span>", k: "key-Space-L", h: "L", label: "次候補", kbMode: "conversion",
+              ime: { page: "2/2 ページ 🔼", startIndex: 5, items: [{text: "華がさく"}, {text: "花がさく"}, {text: "花が咲く", hint: "植物"}, {text: "はながさく", hint: "ひらがな"}], sel: 2 } },
+            { t: "さあ、種をまこう！どんな花が咲くかな？", k: null, h: null, kbMode: "normal" }
+        ];
+        let s7_tail = buildTypingSteps([{h:"たのしみだね。", c:"楽しみだね。"}]);
+        s7_tail.shift();
+        s7_tail.forEach(step => { step.t = "さあ、種をまこう！どんな花が咲くかな？" + step.t; });
+
+        let s9_base = buildTypingSteps([{h:"ふぁんたじー", c:"ふぁんたじー"}]);
+        s9_base.splice(-3);
+        let s9_magic = [
+            { t: "<span class='focus-bunsetsu'>ﾌｧﾝﾀｼﾞｰ</span>", k: "key-Z", h: "L", label: "半カ", kbMode: "normal" },
+            { t: "<span class='focus-bunsetsu'>ふぁんたじー</span>", k: "key-C", h: "L", label: "全ひ", kbMode: "normal" },
+            { t: "<span class='focus-bunsetsu'>ファンタジー</span>", k: "key-X", h: "L", label: "全カ", kbMode: "normal" },
+            { t: "ファンタジー", k: "key-M", h: "R", label: "確定", kbMode: "normal" },
+            { t: "ファンタジー", k: null, h: null, kbMode: "normal" },
+            { t: "ファンタジー", k: null, h: null, kbMode: "normal" }
+        ];
+
+        const scenarios = {
+            tab1: {
+                desc: "【１．種まきと水やりの基本】<br>左手で種をまき、右手で水を与える。濁点などのシフトを使わない、最もプレーンな基本の所作です。交互に指が動くリズミカルな感覚と、「を」という音が生み出される自然な連鎖をご覧ください。",
+                steps: buildTypingSteps([
+                    {h:"はるのはなを", c:"春の花を"}, {h:"さかせて、", c:"咲かせて、"}, {h:"あおいそらを", c:"青い空を"}, {h:"あるく。", c:"歩く。"}
+                ])
+            },
+            tab2: {
+                desc: "【２．新しい色と、選び直せる種】<br>「ナ行」の種に変化の風（シフト）を重ねて「マ行」を咲かせる基本の操作です。また、途中で間違った種を落としてしまっても大丈夫。右手で水を与える前なら、別の種をまき直す（左手を押し直す）だけで、つぼみは自然に上書きされます。",
+                steps: [
+                    ...buildTypingSteps([{h:"まぼろしの", c:"幻の"}, {h:"がーでんで、", c:"ガーデンで、"}]).slice(0, -2),
+                    
+                    { t: "幻のガーデンで、<span class='state'>ナ</span>", k: "key-E", h: "L", label: "ナ行", kbMode: "normal" },
+                    { t: "幻のガーデンで、<span class='state'>マ</span>", k: "key-F", h: "L", label: "マ行", kbMode: "normal" },
+                    { t: "幻のガーデンで、み", k: "key-J", h: "R", label: "い段", kbMode: "normal" },
+                    
+                    { t: "幻のガーデンで、み<span class='state'>サ</span>", k: "key-A", h: "L", label: "サ行", kbMode: "normal" },
+                    { t: "幻のガーデンで、み<span class='state'>ザ</span>", k: "key-F", h: "L", label: "濁音", kbMode: "normal" },
+                    { t: "幻のガーデンで、みず", k: "key-L", h: "R", label: "う段", kbMode: "normal" },
+                    { t: "幻のガーデンで、みず<span class='state'>カ</span>", k: "key-S", h: "L", label: "カ行", kbMode: "normal" },
+                    { t: "幻のガーデンで、みずく", k: "key-L", h: "R", label: "う段", kbMode: "normal" },
+                    
+                    { t: "幻のガーデンで、みずく<span class='state mistake'>ア</span>", k: "key-F", h: "L", label: "ア行", kbMode: "normal" },
+                    { t: "幻のガーデンで、みずく<span class='state mistake'>ザ</span>", k: "key-A", h: "L", label: "サ行", kbMode: "normal" },
+                    { t: "幻のガーデンで、みずく<span class='state'>サ</span>", k: "key-A", h: "L", label: "サ行", kbMode: "normal" }, 
+                    { t: "幻のガーデンで、みずくさ", k: "key-I", h: "R", label: "あ段", kbMode: "normal" },
+                    
+                    { t: "幻のガーデンで、みずくさ<span class='state'>カ</span>", k: "key-S", h: "L", label: "カ行", kbMode: "normal" },
+                    { t: "幻のガーデンで、みずくさ<span class='state'>ガ</span>", k: "key-F", h: "L", label: "濁音", kbMode: "normal" },
+                    { t: "幻のガーデンで、みずくさが", k: "key-I", h: "R", label: "あ段", kbMode: "normal" },
+                    { t: "幻のガーデンで、<span class='focus-bunsetsu'>水草が</span>", k: "key-Space-L", h: "L", label: "変換", kbMode: "conversion" },
+                    
+                    { t: "幻のガーデンで、水草が<span class='state'>ナ</span>", k: "key-E", h: "L", label: "ナ行", kbMode: "normal" },
+                    { t: "幻のガーデンで、水草が<span class='state'>マ</span>", k: "key-F", h: "L", label: "マ行", kbMode: "normal" },
+                    { t: "幻のガーデンで、水草がま", k: "key-I", h: "R", label: "あ段", kbMode: "normal" },
+                    
+                    { t: "幻のガーデンで、水草がま<span class='state'>ア</span>", k: "key-F", h: "L", label: "ア行", kbMode: "normal" },
+                    { t: "幻のガーデンで、水草がまう", k: "key-L", h: "R", label: "う段", kbMode: "normal" },
+                    { t: "幻のガーデンで、水草がまう<span class='state'>キ</span>", k: "key-V", h: "L", label: "キ", kbMode: "symbol" },
+                    { t: "幻のガーデンで、水草がまう。", k: "key-K", h: "R", label: "。", kbMode: "symbol" },
+                    { t: "幻のガーデンで、水草が<span class='focus-bunsetsu'>舞う。</span>", k: "key-Space-L", h: "L", label: "変換", kbMode: "conversion" },
+                    { t: "幻のガーデンで、水草が舞う。", k: null, h: null, kbMode: "normal" },
+                    { t: "幻のガーデンで、水草が舞う。", k: null, h: null, kbMode: "normal" }
+                ]
+            },
+            tab3: {
+                desc: "【３．弾ける雫と、やり直しの風】<br>「ハ行」の種に「半濁点」を重ねて、「パ行」という弾ける雫を咲かせる所作です。ここでもう一つ、庭の生態をご紹介しましょう。もし間違った花を咲かせてしまっても、左手小指のすぐ隣（CapsLockの位置）で「取消」の風をそっと送れば、花はすぐに土へと還ります。遠くのBackspaceへ手を伸ばすことなく、安らぐ手のひらのまま、再び正しい種をまくことができるのです。",
+                steps: [
+                    { t: "<span class='state'>ハ</span>", k: "key-W", h: "L", label: "ハ行", kbMode: "normal" },
+                    { t: "<span class='state'>バ</span>", k: "key-F", h: "L", label: "濁音", kbMode: "normal" },
+                    { t: "ば", k: "key-I", h: "R", label: "あ段", kbMode: "normal" },
+                    { t: "ば<span class='state'>ラ</span>", k: "key-R", h: "L", label: "ラ行", kbMode: "normal" },
+                    { t: "ばら", k: "key-I", h: "R", label: "あ段", kbMode: "normal" },
+                    { t: "ばら<span class='state'>カ</span>", k: "key-S", h: "L", label: "カ行", kbMode: "normal" },
+                    { t: "ばら<span class='state'>ガ</span>", k: "key-F", h: "L", label: "濁音", kbMode: "normal" },
+                    { t: "ばらが", k: "key-I", h: "R", label: "あ段", kbMode: "normal" },
+                    { t: "ばらが<span class='state'>サ</span>", k: "key-A", h: "L", label: "サ行", kbMode: "normal" },
+                    { t: "ばらがさ", k: "key-I", h: "R", label: "あ段", kbMode: "normal" },
+                    { t: "ばらがさ<span class='state mistake'>ナ</span>", k: "key-E", h: "L", label: "ナ行", kbMode: "normal" },
+                    { t: "ばらがさ<span class='mistake'>に</span>", k: "key-J", h: "R", label: "い段", kbMode: "normal" },
+                    { t: "ばらがさ", k: "key-Caps", h: "L", label: "取消", kbMode: "normal" },
+                    { t: "ばらがさ<span class='state'>カ</span>", k: "key-S", h: "L", label: "カ行", kbMode: "normal" },
+                    { t: "ばらがさき", k: "key-J", h: "R", label: "い段", kbMode: "normal" },
+                    { t: "<span class='focus-bunsetsu'>バラが咲き</span>", k: "key-Space-L", h: "L", label: "変換", kbMode: "conversion" },
+                    ...s3_tail
+                ]
+            },
+            tab4: {
+                desc: "【４．重なり合う水（や・ゆ・よ）】<br>「ア行」の種に「い」の水を注ぎ、その響きが残っているうちにもう一つの水（あ・う・お）を重ねる。それだけで「や・ゆ・よ」という柔らかな花が咲きます。人間の自然な発声の通りに、右手の指先が滑らかに連なる心地よさをご体感ください。",
+                steps: buildTypingSteps([
+                    {h:"やわらかい", c:"柔らかい"}, {h:"よかぜに、", c:"夜風に、"}, {h:"ゆめが", c:"夢が"}, {h:"ゆれる。", c:"揺れる。"}
+                ])
+            },
+            tab5: {
+                desc: "【５．小さく寄り添うつぼみ（拗音と、時を遡る風）】<br>「い段」のつぼみに「あ・う・お」の水を重ねる。それだけで、混乱しやすい拗音（ゃ・ゅ・ょ）も例外なく綺麗に咲き揃います。ここで、もう一つの美しい生態をご覧ください。もし変換の直前に「しゃ」を「し」と間違えていたことに気づいても、右手の「Nキー」でカーソルをスッと遡らせ、左手の「取消（CapsLock）」でその一輪だけをピンポイントに摘み取ることができます。遠い矢印キーへ手を伸ばすことなく、過去のつぼみを優しく整えられるのです。",
+                steps: [
+                    { t: "<span class='state'>カ</span>", k: "key-S", h: "L", label: "カ行", kbMode: "normal" },
+                    { t: "き", k: "key-J", h: "R", label: "い段", kbMode: "normal" },
+                    { t: "きゃ", k: "key-I", h: "R", label: "あ段", kbMode: "normal" },
+                    { t: "きゃ<span class='state mistake'>サ</span>", k: "key-A", h: "L", label: "サ行", kbMode: "normal" },
+                    { t: "きゃ<span class='mistake'>し</span>", k: "key-J", h: "R", label: "い段", kbMode: "normal" },
+                    { t: "きゃ<span class='mistake'>し</span><span class='state'>ナ</span>", k: "key-E", h: "L", label: "ナ行", kbMode: "normal" },
+                    { t: "きゃ<span class='mistake'>し</span>な", k: "key-I", h: "R", label: "あ段", kbMode: "normal" },
+                    
+                    { t: "きゃ<span class='mistake'>し</span>な<span class='state'>タ</span>", k: "key-D", h: "L", label: "タ行", kbMode: "normal" },
+                    { t: "きゃ<span class='mistake'>し</span>なつ", k: "key-L", h: "R", label: "う段", kbMode: "normal" },
+                    
+                    { t: "きゃ<span class='mistake'>し</span>なつ<span class='state'>ハ</span>", k: "key-W", h: "L", label: "ハ行", kbMode: "normal" },
+                    { t: "きゃ<span class='mistake'>し</span>なつ<span class='state'>バ</span>", k: "key-F", h: "L", label: "濁音", kbMode: "normal" },
+                    { t: "きゃ<span class='mistake'>し</span>なつぼ", k: "key-K", h: "R", label: "お段", kbMode: "normal" }, 
+                    
+                    { t: "きゃ<span class='mistake'>し</span>なつぼ<span class='state'>ナ</span>", k: "key-E", h: "L", label: "ナ行", kbMode: "normal" },
+                    { t: "きゃ<span class='mistake'>し</span>なつぼ<span class='state'>マ</span>", k: "key-F", h: "L", label: "マ行", kbMode: "normal" },
+                    
+                    { t: "きゃ<span class='mistake'>し</span>なつぼみ", k: "key-J", h: "R", label: "い段", kbMode: "normal" },
+                    { t: "きゃ<span class='mistake'>し</span>なつぼみ<span class='state'>カ</span>", k: "key-S", h: "L", label: "カ行", kbMode: "normal" },
+                    { t: "きゃ<span class='mistake'>し</span>なつぼみ<span class='state'>ガ</span>", k: "key-F", h: "L", label: "濁音", kbMode: "normal" },
+                    { t: "きゃ<span class='mistake'>し</span>なつぼみが", k: "key-I", h: "R", label: "あ段", kbMode: "normal" },
+                    
+                    { t: "きゃ<span class='mistake'>し</span>なつぼみ<span class='cursor'>｜</span>が", k: "key-N", h: "R", label: "←", kbMode: "normal", hideCursor: true },
+                    { t: "きゃ<span class='mistake'>し</span>なつぼ<span class='cursor'>｜</span>みが", k: "key-N", h: "R", label: "←", kbMode: "normal", hideCursor: true },
+                    { t: "きゃ<span class='mistake'>し</span>なつ<span class='cursor'>｜</span>ぼみが", k: "key-N", h: "R", label: "←", kbMode: "normal", hideCursor: true },
+                    { t: "きゃ<span class='mistake'>し</span>な<span class='cursor'>｜</span>つぼみが", k: "key-N", h: "R", label: "←", kbMode: "normal", hideCursor: true },
+                    { t: "きゃ<span class='mistake'>し</span><span class='cursor'>｜</span>なつぼみが", k: "key-N", h: "R", label: "←", kbMode: "normal", hideCursor: true },
+                    
+                    { t: "きゃ<span class='cursor'>｜</span>なつぼみが", k: "key-Caps", h: "L", label: "取消", kbMode: "normal", hideCursor: true },
+                    { t: "きゃ<span class='state'>サ</span><span class='cursor'>｜</span>なつぼみが", k: "key-A", h: "L", label: "サ行", kbMode: "normal", hideCursor: true },
+                    { t: "きゃし<span class='cursor'>｜</span>なつぼみが", k: "key-J", h: "R", label: "い段", kbMode: "normal", hideCursor: true },
+                    { t: "きゃしゃ<span class='cursor'>｜</span>なつぼみが", k: "key-I", h: "R", label: "あ段", kbMode: "normal", hideCursor: true },
+                    { t: "<span class='focus-bunsetsu'>華奢な</span><span class='unfocus-bunsetsu'>つぼみが</span>", k: "key-Space-L", h: "L", label: "変換", kbMode: "conversion" },
+                    ...s5_tail
+                ]
+            },
+            tab6: {
+                desc: "【６．自然な息吹の連鎖（わ・を）】<br>「う」の形にすぼめた口から「あ」と息を吐けば、自然に「わ」の音が生まれます。同じように「お」と吐けば「を（うぉ）」の音に。人間の発声の理（ことわり）をそのまま指先に宿した、この庭ならではの魔法です。「う」の響きに別の水（母音）を重ねるだけで、例外という雑草は一つもなく、美しい花が咲き揃います。",
+                steps: buildTypingSteps([
+                    {h:"わたしのにわに、", c:"わたしの庭に、"}, {h:"うつくしい", c:"美しい"}, {h:"はなを", c:"花を"}, {h:"さかせる。", c:"咲かせる。"}
+                ])
+            },
+            tab7: {
+                desc: "【７．庭の剪定と、ページをめくる風（文節・次候補）】<br>一気に変換して文の区切りが不格好になっても、右手ホームポジションの「J・K・L」だけで文節を自由自在に伸縮できます。さらに、最初の候補に目当ての花がない時は「Oキー（次頁）」へ。スペースキーを連打することなく、一瞬でリストの次のページを開くことができます。遠い矢印キーを使わない、スマートな剪定風景をご覧ください。（最後にVキーで記号のしずくを添えています）",
+                steps: [...s7_manual, ...s7_tail]
+            },
+            tab8: {
+                desc: "【８．時を数える指先（数字の入力）】<br>「365日」や「24時間」。現実の時を刻む数字も、この庭では最上段へ手を伸ばすことなく紡ぎ出せます。左手の「Gキー」で数字の種をまけば、右手の安らぐ定位置（ホームポジション）がそのまま数字の鍵盤へと変わります。手のひらを動かさずに、途切れることなく時を数える心地よさを味わってください。",
+                steps: buildTypingSteps([
+                    {h:"365にち", c:"365日"}, {h:"24じかん、", c:"24時間、"}, {h:"このにわは", c:"この庭は"}, {h:"ねむらない。", c:"眠らない。"}
+                ])
+            },
+            tab9: {
+                desc: "【９．異国の響きと、姿を変える魔法（外来音と文字種変換）】<br>「てぃ」や「ふぁ」といった外来の音も、発声の理のまま「て＋い」「ふ＋あ」と重ねるだけで例外なく咲き誇ります。さらに、左手下段の「Z・X・C」にご注目ください。打った言葉を「半角カタカナ（Z）」「全角ひらがな（C）」「全角カタカナ（X）」へと、瞬時に、そして自由に姿を変える魔法のステートです。遠いファンクションキーへ手を伸ばす必要はもうありません。",
+                steps: [...s9_base, ...s9_magic]
+            },
+            tab10: {
+                desc: "【１０．思考を先読みする庭（予測変換）】<br>数文字の種をまくだけで、庭は思考の先を読み、次々と花を提案してくれます。予測リストへのアクセスは右手の「変換キー」で。リストに入った後は「左手（Space）で下へ」「右手（変換）で上へ」と、両手親指のシーソーのような心地よい動きで候補を巡ります。目当ての花を見つけたら、そのまま次の言葉の種をまき始めるだけで自然に確定されます。一気に文章が満開になる先読みの生態をご体感ください。",
+                steps: [
+                    { t: "<span class='state'>ハ</span>", k: "key-W", h: "L", label: "ハ行", kbMode: "normal" },
+                    { t: "<span class='typing-text'>は</span>", k: "key-I", h: "R", label: "あ段", kbMode: "normal",
+                      ime: { type: 'suggest', items: [{text: "半角カタカナ"}, {text: "は", hint: "ひらがな"}, {text: "話"}], sel: -1 } },
+                    { t: "<span class='typing-text'>は</span><span class='state'>ナ</span>", k: "key-E", h: "L", label: "ナ行", kbMode: "normal",
+                      ime: { type: 'suggest', items: [{text: "話"}, {text: "花を咲かせ"}, {text: "花咲く言葉"}], sel: -1 } },
+                    { t: "<span class='typing-text'>はな</span>", k: "key-I", h: "R", label: "あ段", kbMode: "normal",
+                      ime: { type: 'suggest', items: [{text: "話"}, {text: "花を咲かせ"}, {text: "花咲く言葉"}], sel: -1 } },
+                    { t: "<span class='typing-text'>はな</span><span class='state'>サ</span>", k: "key-A", h: "L", label: "サ行", kbMode: "normal",
+                      ime: { type: 'suggest', items: [{text: "話し"}, {text: "花咲く言葉"}, {text: "花咲く言葉で"}], sel: -1 } },
+                    
+                    { t: "<span class='typing-text'>はなさ</span>", k: "key-I", h: "R", label: "あ段", kbMode: "normal",
+                      ime: { type: 'suggest', items: [{text: "花咲く言葉で"}, {text: "花咲く"}, {text: "話し"}], sel: -1 } },
+                    
+                    { t: "<span class='focus-bunsetsu'>花咲く言葉で</span>", k: "key-Space-R", h: "R", label: "予測選択", kbMode: "conversion",
+                      ime: { type: 'suggest', items: [{text: "花咲く言葉で"}, {text: "花咲く"}, {text: "話し"}], sel: 0 } },
+                    { t: "<span class='focus-bunsetsu'>花咲く</span>", k: "key-Space-L", h: "L", label: "下へ", kbMode: "conversion",
+                      ime: { type: 'suggest', items: [{text: "花咲く言葉で"}, {text: "花咲く"}, {text: "話し"}], sel: 1 } },
+                    { t: "<span class='focus-bunsetsu'>話し</span>", k: "key-Space-L", h: "L", label: "下へ", kbMode: "conversion",
+                      ime: { type: 'suggest', items: [{text: "花咲く言葉で"}, {text: "花咲く"}, {text: "話し"}], sel: 2 } },
+                    { t: "<span class='focus-bunsetsu'>花咲く</span>", k: "key-Space-R", h: "R", label: "上へ", kbMode: "conversion",
+                      ime: { type: 'suggest', items: [{text: "花咲く言葉で"}, {text: "花咲く"}, {text: "話し"}], sel: 1 } },
+                    { t: "<span class='focus-bunsetsu'>花咲く言葉で</span>", k: "key-Space-R", h: "R", label: "上へ", kbMode: "conversion",
+                      ime: { type: 'suggest', items: [{text: "花咲く言葉で"}, {text: "花咲く"}, {text: "話し"}], sel: 0 } },
+                    
+                    { t: "花咲く言葉で<span class='state'>サ</span>", k: "key-A", h: "L", label: "サ行", kbMode: "normal" },
+                    { t: "花咲く言葉で<span class='state'>ザ</span>", k: "key-F", h: "L", label: "濁音", kbMode: "normal" },
+                    { t: "花咲く言葉で<span class='typing-text'>じ</span>", k: "key-J", h: "R", label: "い段", kbMode: "normal" },
+                    { t: "花咲く言葉で<span class='typing-text'>じ</span><span class='state'>ハ</span>", k: "key-W", h: "L", label: "ハ行", kbMode: "normal" },
+                    { t: "花咲く言葉で<span class='typing-text'>じ</span><span class='state'>バ</span>", k: "key-F", h: "L", label: "濁音", kbMode: "normal" },
+                    { t: "花咲く言葉で<span class='typing-text'>じぶ</span>", k: "key-L", h: "R", label: "う段", kbMode: "normal",
+                      ime: { type: 'suggest', items: [{text: "自分だけの庭を"}, {text: "自分で"}, {text: "部分は"}], sel: -1 } },
+                    { t: "花咲く言葉で<span class='focus-bunsetsu'>自分だけの庭を</span>", k: "key-Space-R", h: "R", label: "予測選択", kbMode: "conversion",
+                      ime: { type: 'suggest', items: [{text: "自分だけの庭を"}, {text: "自分で"}, {text: "部分は"}], sel: 0 } },
+
+                    { t: "花咲く言葉で自分だけの庭を<span class='state'>サ</span>", k: "key-A", h: "L", label: "サ行", kbMode: "normal" },
+                    { t: "花咲く言葉で自分だけの庭を<span class='typing-text'>そ</span>", k: "key-K", h: "R", label: "お段", kbMode: "normal" },
+                    { t: "花咲く言葉で自分だけの庭を<span class='typing-text'>そ</span><span class='state'>タ</span>", k: "key-D", h: "L", label: "タ行", kbMode: "normal" },
+                    { t: "花咲く言葉で自分だけの庭を<span class='typing-text'>そ</span><span class='state'>ダ</span>", k: "key-F", h: "L", label: "濁音", kbMode: "normal" },
+                    { t: "花咲く言葉で自分だけの庭を<span class='typing-text'>そだ</span>", k: "key-I", h: "R", label: "あ段", kbMode: "normal",
+                      ime: { type: 'suggest', items: [{text: "育てよう。"}, {text: "育てる"}, {text: "そうだね"}], sel: -1 } },
+                    { t: "花咲く言葉で自分だけの庭を<span class='focus-bunsetsu'>育てよう。</span>", k: "key-Space-R", h: "R", label: "予測選択", kbMode: "conversion",
+                      ime: { type: 'suggest', items: [{text: "育てよう。"}, {text: "育てる"}, {text: "そうだね"}], sel: 0 } },
+                    
+                    { t: "花咲く言葉で自分だけの庭を育てよう。", k: "key-M", h: "R", label: "確定", kbMode: "normal" },
+                    { t: "花咲く言葉で自分だけの庭を育てよう。", k: null, h: null, kbMode: "normal" }
+                ]
+            }
+        };
+
+        let currentInterval = null;
+        let stepIndex = 0;
+        let currentScenario = '';
+        let speedMultiplier = 1.0;
+        let baseInterval = 1000;
+        let baseTimeout = 700;
+
+        function fitSimulatorToScreen() {
+            const demoBox = document.getElementById('demo-section');
+            const demoInner = document.getElementById('demo-inner');
+            const kbWrapper = document.getElementById('keyboard-wrapper');
+            
+            demoInner.style.transform = 'none';
+            demoBox.style.height = 'auto';
+            
+            const naturalHeight = demoInner.offsetHeight;
+            const requiredWidth = kbWrapper.scrollWidth; 
+            
+            const maxAvailableHeight = window.innerHeight * 0.9 - 50; 
+            const maxAvailableWidth = demoBox.offsetWidth - 60;
+            
+            const scaleY = maxAvailableHeight / naturalHeight;
+            const scaleX = maxAvailableWidth / requiredWidth;
+            
+            const scale = Math.min(1, scaleX, scaleY);
+            
+            if (scale < 1) {
+                demoInner.style.transform = `scale(${scale})`;
+                demoBox.style.height = `${naturalHeight * scale + 50}px`;
+            }
+        }
+
+        function playScenario(scenarioName) {
+            document.querySelectorAll('.tab-btn').forEach(btn => {
+                if (btn.getAttribute('data-scenario') === scenarioName) {
+                    btn.classList.add('active');
+                } else {
+                    btn.classList.remove('active');
+                }
+            });
+            
+            currentScenario = scenarioName;
+            stepIndex = 0;
+            document.getElementById('demo-desc').innerHTML = scenarios[scenarioName].desc;
+            
+            const finalStepHTML = scenarios[scenarioName].steps[scenarios[scenarioName].steps.length - 1].t;
+            const tempDiv = document.createElement('div');
+            tempDiv.innerHTML = finalStepHTML;
+            
+            document.getElementById('target-text').innerText = tempDiv.innerText.replace(/｜/g, '');
+
+            document.getElementById('sim-text').innerHTML = "";
+            document.getElementById('sim-screen').classList.remove('hide-cursor');
+            document.getElementById('ime-popup').style.display = 'none';
+            document.querySelectorAll('.key').forEach(k => k.classList.remove('active-L', 'active-R'));
+            
+            baseInterval = 1000;
+            baseTimeout = 700;
+            
+            requestAnimationFrame(() => {
+                fitSimulatorToScreen();
+            });
+
+            if (currentInterval) clearInterval(currentInterval);
+            runStep(); 
+            currentInterval = setInterval(runStep, baseInterval / speedMultiplier);
+        }
+
+        function runStep() {
+            if (!currentScenario) return;
+            const scenario = scenarios[currentScenario];
+            const step = scenario.steps[stepIndex];
+            
+            document.getElementById('sim-text').innerHTML = step.t;
+
+            if (step.hideCursor) {
+                document.getElementById('sim-screen').classList.add('hide-cursor');
+            } else {
+                document.getElementById('sim-screen').classList.remove('hide-cursor');
+            }
+
+            const kbWrapper = document.getElementById('keyboard-wrapper');
+            kbWrapper.classList.remove('mode-number', 'mode-symbol', 'mode-conversion');
+            if (step.kbMode && step.kbMode !== 'normal') {
+                kbWrapper.classList.add('mode-' + step.kbMode);
+            }
+
+            const popup = document.getElementById('ime-popup');
+            if (step.ime) {
+                popup.style.display = 'flex';
+                
+                if (step.ime.type === 'suggest') {
+                    popup.classList.add('suggest-mode');
+                } else {
+                    popup.classList.remove('suggest-mode');
+                }
+
+                let html = '';
+                if (step.ime.page) {
+                    html += `<div class="ime-page">${step.ime.page}</div>`;
+                }
+                
+                step.ime.items.forEach((item, index) => {
+                    const isSelected = index === step.ime.sel ? 'selected' : '';
+                    const hintHtml = item.hint ? `<span class="ime-hint">${item.hint}</span>` : '';
+                    const displayNum = step.ime.type === 'suggest' ? index + 1 : (step.ime.startIndex ? step.ime.startIndex + index : index + 1);
+                    html += `<div class="ime-item ${isSelected}"><span class="ime-num">${displayNum}</span><span class="ime-text">${item.text}</span>${hintHtml}</div>`;
+                });
+
+                if (step.ime.type === 'suggest') {
+                    html += `<div class="ime-suggest-footer">変換キーで選択</div>`;
+                }
+
+                popup.innerHTML = html;
+            } else {
+                popup.style.display = 'none';
+            }
+
+            document.querySelectorAll('.key').forEach(k => k.classList.remove('active-L', 'active-R'));
+
+            if (step.k) {
+                const keyEl = document.getElementById(step.k);
+                if (keyEl) {
+                    const activeClass = step.h === 'L' ? 'active-L' : 'active-R';
+                    const jpSpan = keyEl.querySelector('.jp');
+                    if (jpSpan && step.label) {
+                        jpSpan.innerText = step.label;
+                    }
+                    keyEl.classList.add(activeClass);
+                    
+                    setTimeout(() => {
+                        keyEl.classList.remove(activeClass);
+                    }, baseTimeout / speedMultiplier); 
+                }
+            }
+
+            stepIndex++;
+            if (stepIndex >= scenario.steps.length) {
+                stepIndex = 0;
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            const tabs = document.querySelectorAll('.tab-btn');
+            tabs.forEach(tab => {
+                tab.addEventListener('click', (e) => {
+                    playScenario(e.target.getAttribute('data-scenario'));
+                });
+            });
+            
+            document.getElementById('playback-speed').addEventListener('change', (e) => {
+                speedMultiplier = parseFloat(e.target.value);
+                if (currentInterval) {
+                    clearInterval(currentInterval);
+                    currentInterval = setInterval(runStep, baseInterval / speedMultiplier);
+                }
+            });
+
+            window.addEventListener('resize', fitSimulatorToScreen);
+            
+            playScenario('tab1'); 
+        });
+    </script>
+</body>
+</html>
