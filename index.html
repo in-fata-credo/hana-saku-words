@@ -63,6 +63,7 @@
         }
         .tech-summary h3 { margin-top: 0; color: var(--garden-green); font-size: 1.1rem; text-align: center; margin-bottom: 25px; }
         
+        /* 💡 リズムを見せる4ステップカード */
         .tech-list { display: flex; gap: 10px; margin-bottom: 25px; padding: 0; list-style: none; flex-wrap: wrap; justify-content: center; }
         .tech-item { flex: 1; min-width: 150px; text-align: center; font-size: 0.85rem; background: #fdfdfc; border: 1px solid #eee; border-radius: 8px; padding: 15px 8px; position: relative; box-shadow: 0 2px 5px rgba(0,0,0,0.02); }
         @media (min-width: 650px) {
@@ -83,7 +84,7 @@
         .example-row { display: flex; justify-content: center; align-items: center; gap: 6px; margin-bottom: 12px; }
         .example-row:last-child { margin-bottom: 0; }
         .ex-key { background: #fff; border: 2px solid #ccc; border-radius: 6px; padding: 6px 10px; box-shadow: 0 3px 0 #ccc; font-weight: bold; line-height: 1.2; font-size: 1rem; font-family: sans-serif; }
-        .ex-key small { font-size: 0.75rem; font-weight: normal; display: block; margin-top: 2px; }
+        .ex-key small { font-size: 0.65rem; font-weight: normal; display: block; margin-top: 2px; }
         .left-key { border-color: var(--accent-color); color: var(--accent-color); }
         .left-key small { color: var(--accent-color); }
         .right-key { border-color: var(--garden-green); color: var(--garden-green); }
@@ -91,6 +92,7 @@
         .ex-plus, .ex-equal { font-weight: bold; color: #999; font-size: 1.1rem; }
         .ex-result { font-size: 1.5rem; font-weight: bold; color: var(--garden-green); margin-left: 2px; min-width: 40px; text-align: left; }
 
+        /* 💡 操作マッピング図解 */
         .op-graphic { display: flex; justify-content: center; align-items: center; gap: 20px; background: #fff; border: 1px solid #eee; border-radius: 6px; padding: 15px 10px; height: calc(100% - 45px); box-sizing: border-box;}
         .op-part { display: flex; flex-direction: column; align-items: center; }
         .op-btn { display: block; font-weight: bold; color: #555; font-size: 0.95rem; border: 2px solid #ccc; padding: 8px 12px; border-radius: 6px; background: #fafafa; margin-bottom: 8px; box-shadow: 0 3px 0 #ccc; font-family: sans-serif; letter-spacing: 0.05em; }
@@ -98,6 +100,7 @@
         .op-part small { color: #666; font-size: 0.7rem; font-weight: bold; margin-top: 6px; }
         .op-center { color: #ccc; font-weight: bold; font-size: 1.2rem; }
 
+        /* ミニキーボードマッピング */
         .mini-key-grid { display: flex; flex-direction: column; gap: 4px; align-items: center; }
         .mini-key-row { display: flex; gap: 4px; justify-content: center; }
         .m-key { background: #fff; border: 1px solid var(--garden-green); border-radius: 4px; padding: 4px 2px; display: flex; flex-direction: column; align-items: center; min-width: 42px; box-shadow: 0 2px 0 var(--garden-green); }
@@ -206,10 +209,7 @@
         .kb-half { display: grid; grid-template-columns: repeat(6, 36px); grid-gap: 6px; padding: 12px; background-color: #fcfcfc; border-radius: 12px; border: 1px solid #eaeaea; }
         .key { width: 36px; height: 36px; background-color: var(--key-bg); border: 1px solid var(--key-border); border-radius: 5px; box-shadow: 0 3px 0 #d0d0d0; transition: background-color 0.3s, border-color 0.3s, color 0.3s, transform 0.1s, box-shadow 0.1s; display: flex; justify-content: center; align-items: center; flex-direction: column; }
         .key .base { display: block; font-size: 0.9rem; font-weight: bold; color: #999; font-family: sans-serif; transition: color 0.3s; }
-        
-        /* 💡 修正点：文字サイズを大きくし、デフォルトの白を削除（下で指定） */
         .key .jp { display: none; font-size: 0.75rem; font-weight: bold; white-space: nowrap; text-shadow: 0 1px 0 rgba(255,255,255,0.3); }
-        
         .key.space-key { width: auto; grid-column: 4 / span 3; }
         .right-hand .key.space-key { grid-column: 1 / span 3; }
 
@@ -220,12 +220,11 @@
         .grp-ext  { background-color: #f5f5f5; border-color: #e0e0e0; }
         .grp-bot  { background-color: #f5f5f5; border-color: #e0e0e0; }
 
-        /* 💡 修正点：アクティブ時の背景色変更＋発光エフェクト＋濃い文字色 */
         .key.active-L { background-color: var(--accent-color) !important; transform: translateY(3px); box-shadow: 0 0 8px rgba(176, 156, 133, 0.6) !important; border-color: var(--accent-color) !important; }
         .key.active-R { background-color: var(--garden-green) !important; transform: translateY(3px); box-shadow: 0 0 8px rgba(118, 149, 102, 0.6) !important; border-color: var(--garden-green) !important; }
         .key.active-L .base, .key.active-R .base { display: none !important; }
-        .key.active-L .jp { display: block !important; color: #3b2f21; } /* 左手：濃いブラウン */
-        .key.active-R .jp { display: block !important; color: #1e3315; } /* 右手：濃いグリーン */
+        .key.active-L .jp { display: block !important; color: #3b2f21; } 
+        .key.active-R .jp { display: block !important; color: #1e3315; } 
 
         /* 魔法のハイライト */
         .mode-number #key-J, .mode-number #key-K, .mode-number #key-L, .mode-number #key-Semi, .mode-number #key-Colon, .mode-number #key-U, .mode-number #key-I, .mode-number #key-O, .mode-number #key-P, .mode-number #key-At { background-color: #ffebd6 !important; border-color: #ffc480 !important; }
@@ -446,7 +445,7 @@
                 <tr>
                     <th>比較項目</th>
                     <th>一般的なローマ字入力</th>
-                    <th class="highlight-row">配列 (花咲く言葉)</th>
+                    <th class="highlight-row">HSW配列 (花咲く言葉)</th>
                 </tr>
             </thead>
             <tbody>
@@ -543,33 +542,16 @@
         </div>
     </section>
 
-    <section class="section">
-        <h2>名前に込めた願い</h2>
-        <div class="origin-text">
-            <p>これまでのキーボード入力には、文字を「叩く」「打鍵する」という、少し攻撃的で無機質なイメージがありました。</p>
-            <p>パソコンに向かう時間は、ただ文字のデータを打ち込むだけの作業ではないはずです。<br>
-            キーボードは、あなたの頭の中にある思考や感情を、言葉として形にするための「庭」であってほしい。<br>
-            機械に触れる心理的なハードルを下げ、自分を表現する時間に温かさを添えたい。</p>
-            <p>そんな願いから、「打つ」という行為を「花が咲く」というポジティブな表現に変え、「花咲く言葉」と名付けました。</p>
-            <p>もし、「どうして『咲く』って言うの？」と聞かれたら、こう答えます。</p>
-            
-            <div class="quote">
-                「『サ』の種に濁点を与えて『ザ』に芽吹き、<br>『い』と『あ』の水を重ねて注ぐと、自然に『じゃ』の花が咲くでしょう？」
-            </div>
-            <p>音が重なり、言葉が育ち、画面の上に美しく咲き誇る。<br>あなたの心にある言葉の種を、この庭で咲かせてみませんか。</p>
-        </div>
-    </section>
-
-<section class="section" style="background-color: #f9fbf9; border-top: 1px solid #eaeaea; border-bottom: 1px solid #eaeaea; padding: 60px 20px;">
+    <section class="section" style="background-color: #f9fbf9; border-top: 1px solid #eaeaea; border-bottom: 1px solid #eaeaea; padding: 60px 20px;">
         <h2 style="margin-bottom: 30px;">花咲く言葉を、あなたのPCへ。</h2>
         
         <div style="text-align: center; margin-bottom: 50px;">
             <p style="color: #555; margin-bottom: 20px;">
-                配列は「Google日本語入力」の機能を使って設定します。<br>
+                HSW配列は「Google日本語入力」の機能を使って設定します。<br>
                 以下のボタンから設定ファイル一式をダウンロードしてください。
             </p>
-            <a href="./hsw_release_v1.0.zip" download style="display: inline-block; background-color: var(--garden-green); color: #fff; padding: 15px 40px; border-radius: 30px; text-decoration: none; font-size: 1.2rem; font-weight: bold; box-shadow: 0 4px 10px rgba(118, 149, 102, 0.3); transition: transform 0.2s;">
-                📥 配列キットをダウンロード
+            <a href="./hsw_release_v2.0.zip" download style="display: inline-block; background-color: var(--garden-green); color: #fff; padding: 15px 40px; border-radius: 30px; text-decoration: none; font-size: 1.2rem; font-weight: bold; box-shadow: 0 4px 10px rgba(118, 149, 102, 0.3); transition: transform 0.2s;">
+                📥 HSW配列キットをダウンロード
             </a>
             <p style="font-size: 0.8rem; color: #888; margin-top: 10px;">内容物：keymap.txt / romantable.txt / dic-hana-saku-words.txt</p>
         </div>
@@ -603,8 +585,8 @@
 
                 <li style="margin-bottom: 15px;">
                     <strong>【専用辞書】の読み込み</strong><br>
-                    プロパティ画面の「辞書」タブを開き、ユーザー辞書の <strong>［ユーザー辞書の編集］</strong> をクリックします。<br>
-                    辞書ツールの左上にある <strong>［管理］ ➔ ［新規辞書にインポート］</strong> を選び、フォルダ内の <code style="background: #f4f4f4; padding: 2px 6px; border-radius: 4px; color: #b76c6c;">dic-hana-saku-words.txt</code> を選択し、辞書名（辞書など）をつけてインポートします。
+                    プロパティ画面の「辞書」タブを開き、右下の <strong>［辞書ツールを起動］</strong> をクリックします。<br>
+                    辞書ツールの左上にある <strong>［管理］ ➔ ［新規辞書にインポート］</strong> を選び、フォルダ内の <code style="background: #f4f4f4; padding: 2px 6px; border-radius: 4px; color: #b76c6c;">dic-hana-saku-words.txt</code> を選択し、辞書名（HSW辞書など）をつけてインポートします。
                 </li>
 
                 <li>
@@ -618,9 +600,27 @@
                 同じプロパティ画面で、キー設定とローマ字テーブルを「MS-IME」などの標準設定に戻すだけで、いつでも元の入力方法に戻せます。
             </p>
         </div>
-    </section>    
+    </section>
+
+    <section class="section">
+        <h2>名前に込めた願い</h2>
+        <div class="origin-text">
+            <p>これまでのキーボード入力には、文字を「叩く」「打鍵する」という、少し攻撃的で無機質なイメージがありました。</p>
+            <p>パソコンに向かう時間は、ただ文字のデータを打ち込むだけの作業ではないはずです。<br>
+            キーボードは、あなたの頭の中にある思考や感情を、言葉として形にするための「庭」であってほしい。<br>
+            機械に触れる心理的なハードルを下げ、自分を表現する時間に温かさを添えたい。</p>
+            <p>そんな願いから、「打つ」という行為を「花が咲く」というポジティブな表現に変え、「花咲く言葉」と名付けました。</p>
+            <p>もし、「どうして『咲く』って言うの？」と聞かれたら、こう答えます。</p>
+            
+            <div class="quote">
+                「『サ』の種に濁点を与えて『ザ』に芽吹き、<br>『い』と『あ』の水を重ねて注ぐと、自然に『じゃ』の花が咲くでしょう？」
+            </div>
+            <p>音が重なり、言葉が育ち、画面の上に美しく咲き誇る。<br>あなたの心にある言葉の種を、この庭で咲かせてみませんか。</p>
+        </div>
+    </section>
+
     <footer>
-        <p>日本語入力配列 - 花咲く言葉 (HSW配列)</p>
+        <p>日本語入力配列 - 花咲く言葉 (HSW)</p>
     </footer>
 
     <script>
@@ -870,7 +870,8 @@
                 ])
             },
             tab2: {
-                desc: "【２．新しい色と、選び直せる種】<br>「ナ行」の種に変化の風（シフト）を重ねて「マ行」を咲かせる基本の操作です。また、途中で間違った種を落としてしまっても大丈夫。右手で水を与える前なら、別の種をまき直す（左手を押し直す）だけで、つぼみは自然に上書きされます。",
+                /* 💡 修正：種（子音）と水（母音）両方のリカバリーを説明 */
+                desc: "【２．選び直せる種と、上書きできる水】<br>「ナ行」の種に変化の風（シフト）を重ねて「マ行」を咲かせる基本の操作です。途中で間違った種（子音）を落としても、別の種をまき直すだけで上書きされます。さらに、咲かせた花（母音）を間違えても、そのまま正しい水を重ねるだけで自然に修正されます。遠いBackspaceキーに手を伸ばす必要はありません。",
                 steps: [
                     ...buildTypingSteps([{h:"まぼろしの", c:"幻の"}, {h:"がーでんで、", c:"ガーデンで、"}]).slice(0, -2),
                     
@@ -894,8 +895,11 @@
                     { t: "幻のガーデンで、みずくさが", k: "key-I", h: "R", label: "あ段", kbMode: "normal" },
                     { t: "幻のガーデンで、<span class='focus-bunsetsu'>水草が</span>", k: "key-Space-L", h: "L", label: "変換", kbMode: "conversion" },
                     
+                    /* 💡 修正：母音を「も」➔「もぁ」➔「ま」とリカバリーする動作に変更 */
                     { t: "幻のガーデンで、水草が<span class='state'>ナ</span>", k: "key-E", h: "L", label: "ナ行", kbMode: "normal" },
                     { t: "幻のガーデンで、水草が<span class='state'>マ</span>", k: "key-F", h: "L", label: "マ行", kbMode: "normal" },
+                    { t: "幻のガーデンで、水草が<span class='mistake'>も</span>", k: "key-K", h: "R", label: "お段", kbMode: "normal" },
+                    { t: "幻のガーデンで、水草が<span class='mistake'>もぁ</span>", k: "key-I", h: "R", label: "あ段", kbMode: "normal" },
                     { t: "幻のガーデンで、水草がま", k: "key-I", h: "R", label: "あ段", kbMode: "normal" },
                     
                     { t: "幻のガーデンで、水草がま<span class='state'>ア</span>", k: "key-F", h: "L", label: "ア行", kbMode: "normal" },
