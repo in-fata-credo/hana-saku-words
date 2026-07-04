@@ -467,7 +467,7 @@
 
   // フリーズを完全に防ぐ、厳密マッチのBFSパス探索
   function isPromising(state, target) {
-      let maxL = Math.min(state.length, 4);
+      let maxL = Math.min(state.length, 3);
       for (let L = 0; L <= maxL; L++) {
           let fixedPart = state.slice(0, state.length - L);
           if (target.startsWith(fixedPart)) return true;
@@ -501,7 +501,7 @@
               }
           }
           
-          if (curr.path.length >= 4) continue;
+          if (curr.path.length >= 3) continue;
           if (!isPromising(curr.text, remainingTarget)) continue;
 
           for (let c of validKeyChars) {
