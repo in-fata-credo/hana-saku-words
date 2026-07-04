@@ -260,11 +260,17 @@
     letter-spacing: 0.05em;
     margin-bottom: 6px;
   }
+  
+  /* ============================================================
+     ★ 修正：キーボードレイアウトとズレ表現
+     ============================================================ */
   #keyboard-heatmap {
     display: flex;
     flex-direction: column;
-    align-items: center;
+    align-items: flex-start; /* margin-leftを効かせるため */
     gap: 4px;
+    width: fit-content;
+    margin: 0 auto;
   }
   .kb-row {
     display: flex;
@@ -299,7 +305,6 @@
     text-align: center;
   }
 
-  /* ★ 次に押すべきキーの強調スタイル（黒セル＋赤文字＋文字大） */
   .kb-key.next-highlight {
     background-color: #000000 !important;
     color: #ff3333 !important;
@@ -437,11 +442,11 @@
   let nextExpectedKey = null;
 
   // ============================================================
-  // ルート予測アルゴリズムとプレフィックス管理
+  // ★ ルート予測アルゴリズムとプレフィックス管理（修正版）
   // ============================================================
-  let recipeCache = {};
+  let searchCache = {};
   let validKeyChars = [];
-  let validMapPrefixes = new Set(); // ★ 無効なキー（存在しない子音）の判定用
+  let validMapPrefixes = new Set(); // 無効キー判定用
 
   function initSearchCaches() {
       validMapPrefixes.clear();
@@ -457,58 +462,60 @@
       }
       "abcdefghijklmnopqrstuvwxyz-.,;:/@+*<>?1234567890".split('').forEach(c => physicalKeys.add(c));
       validKeyChars = Array.from(physicalKeys);
-      recipeCache = {};
+      searchCache = {};
   }
 
-  // 指定した「かな」を打つための正しい状態遷移辞書（レシピ）を生成・キャッシュする
-  function getRecipe(targetStr) {
-      if (!targetStr) return {};
-      if (recipeCache[targetStr]) return recipeCache[targetStr];
+  // フリーズを完全に防ぐ、厳密マッチのBFSパス探索
+  function isPromising(state, target) {
+      let maxL = Math.min(state.length, 4);
+      for (let L = 0; L <= maxL; L++) {
+          let fixedPart = state.slice(0, state.length - L);
+          if (target.startsWith(fixedPart)) return true;
+      }
+      return false;
+  }
 
-      let validStates = {};
-      let queue = [ { text: "", path: [] } ];
-      let visited = new Set([""]);
-      let foundPath = null;
+  function findNextKeyAndValidity(buffer, remainingTarget) {
+      if (!remainingTarget) return { isValid: true, nextKey: null };
+
+      let cacheKey = buffer + "|" + remainingTarget;
+      if (searchCache[cacheKey]) return searchCache[cacheKey];
+
+      let queue = [ { text: buffer, path: [] } ];
+      let visited = new Set([buffer]);
+      
+      let isValid = false;
+      let nextKey = null;
 
       while(queue.length > 0) {
           let curr = queue.shift();
           
-          if (curr.text === targetStr) {
-              foundPath = curr.path;
-              break;
+          // STRICT EXACT match (カタカナ変換させずに判定することでスとすを区別)
+          if (remainingTarget.startsWith(curr.text)) {
+              if (curr.text !== buffer) {
+                  isValid = true;
+                  nextKey = curr.path[0];
+                  break;
+              } else if (curr.path.length === 0) {
+                  isValid = true;
+              }
           }
-          if (curr.path.length >= 5) continue; // HSWの1文字/拗音入力は最大でも4手程度
+          
+          if (curr.path.length >= 4) continue;
+          if (!isPromising(curr.text, remainingTarget)) continue;
 
           for (let c of validKeyChars) {
               let nextText = applyCustomIME(curr.text + c);
-              if (nextText.length <= targetStr.length + 1 && !visited.has(nextText)) {
+              if (nextText.length <= remainingTarget.length + 2 && !visited.has(nextText)) {
                   visited.add(nextText);
                   queue.push({ text: nextText, path: [...curr.path, c] });
               }
           }
       }
-
-      if (foundPath) {
-          let state = "";
-          for (let i = 0; i < foundPath.length; i++) {
-              validStates[state] = foundPath[i];
-              state = applyCustomIME(state + foundPath[i]);
-          }
-      }
-      recipeCache[targetStr] = validStates;
-      return validStates;
-  }
-
-  // ターゲット文字列から次に打つべき1つの「かな（または拗音）」を抽出
-  function getFirstKana(str) {
-      if (!str) return "";
-      if (str.length >= 2) {
-          let two = str.substring(0, 2);
-          if (/[ぁ-んァ-ヶ][ゃゅょぁぃぅぇぉャュョァィゥェォ]/.test(two)) {
-              return two;
-          }
-      }
-      return str.substring(0, 1);
+      
+      let result = { isValid, nextKey };
+      searchCache[cacheKey] = result;
+      return result;
   }
 
   function resetSessionStats() {
@@ -663,11 +670,11 @@
     listEl.innerHTML = html;
   }
 
-  // ★ 新しいキーボードレイアウト定義
+  // ★ 新しいキーボードレイアウト定義（ズレ対応と不要キーの無地化）
   const KEYBOARD_LAYOUT = [
-    [{id: 'q', label: 'q'}, {id: 'w', label: 'w'}, {id: 'e', label: 'e'}, {id: 'r', label: 'r'}, {id: 't', label: ''}, {id: 'y', label: 'y'}, {id: 'u', label: 'u'}, {id: 'i', label: 'i'}, {id: 'o', label: 'o'}, {id: 'p', label: 'p'}, {id: '@', label: '@'}],
-    [{id: 'capslock', label: 'Caps', width: '52px'}, {id: 'a', label: 'a'}, {id: 's', label: 's'}, {id: 'd', label: 'd'}, {id: 'f', label: 'f'}, {id: 'g', label: 'g'}, {id: 'h', label: 'h'}, {id: 'j', label: 'j'}, {id: 'k', label: 'k'}, {id: 'l', label: 'l'}, {id: ';', label: ';'}, {id: ':', label: ':'}],
-    [{id: 'z', label: ''}, {id: 'x', label: ''}, {id: 'c', label: ''}, {id: 'v', label: ''}, {id: 'b', label: ''}, {id: 'n', label: ''}, {id: 'm', label: ''}, {id: ',', label: ''}, {id: '.', label: ''}, {id: '/', label: ''}]
+    { spacer: '20px', keys: [{id: 'q', label: 'q'}, {id: 'w', label: 'w'}, {id: 'e', label: 'e'}, {id: 'r', label: 'r'}, {id: 't', label: ''}, {id: 'y', label: 'y'}, {id: 'u', label: 'u'}, {id: 'i', label: 'i'}, {id: 'o', label: 'o'}, {id: 'p', label: 'p'}, {id: '@', label: '@'}] },
+    { spacer: '0px', keys: [{id: 'capslock', label: 'Caps', width: '40px'}, {id: 'a', label: 'a'}, {id: 's', label: 's'}, {id: 'd', label: 'd'}, {id: 'f', label: 'f'}, {id: 'g', label: 'g'}, {id: 'h', label: 'h'}, {id: 'j', label: 'j'}, {id: 'k', label: 'k'}, {id: 'l', label: 'l'}, {id: ';', label: ';'}, {id: ':', label: ':'}] },
+    { spacer: '60px', keys: [{id: 'z', label: ''}, {id: 'x', label: ''}, {id: 'c', label: ''}, {id: 'v', label: 'v'}, {id: 'b', label: ''}, {id: 'n', label: ''}, {id: 'm', label: ''}, {id: ',', label: ''}, {id: '.', label: ''}, {id: '/', label: ''}] }
   ];
 
   function timeToColor(t, minT, maxT) {
@@ -689,16 +696,19 @@
 
     let html = '';
     KEYBOARD_LAYOUT.forEach(row => {
-      html += '<div class="kb-row">';
-      row.forEach(keyObj => {
+      html += `<div class="kb-row" style="margin-left: ${row.spacer};">`;
+      row.keys.forEach(keyObj => {
         const s = keyStats[keyObj.id];
         let bg = '#eee';
         let missBadge = '';
+        
+        // ラベルがある場合のみ色付けとバッジ表示
         if (s && keyObj.label !== '') {
           const avgTime = s.timeCount > 0 ? s.timeSum / s.timeCount : null;
           bg = timeToColor(avgTime, minT, maxT);
           if (s.missCount > 0) missBadge = `<span class="kb-miss-badge">${s.missCount}</span>`;
         }
+        
         const highlightClass = (keyObj.id === nextExpectedKey) ? ' next-highlight' : '';
         const widthStyle = keyObj.width ? `width: ${keyObj.width};` : '';
         html += `<div class="kb-key${highlightClass}" id="kb-key-${keyObj.id}" style="background-color:${bg}; ${widthStyle}">${escapeHTML(keyObj.label)}${missBadge}</div>`;
@@ -1015,30 +1025,34 @@
               lastActiveTargetChar = activeChar || lastActiveTargetChar;
             }
 
-            // ★ キャッシュを利用した超軽量レシピチェック
-            let remainingTarget = token.target.substring(currentMatch);
-            let nextKana = getFirstKana(remainingTarget);
-            let recipe = getRecipe(nextKana);
-
+            // ★ 新規：BFSによる確実なルート予測
+            let remainingTarget = targetReading.substring(matchLen);
             let extra = remainingVal.substring(currentMatch);
-            let isValid = (extra in recipe) || (extra === "");
-            
+            let searchResult = findNextKeyAndValidity(extra, remainingTarget);
+            let isValid = searchResult.isValid;
+
             if (nextExpectedKey) {
                 const prevEl = document.getElementById('kb-key-' + nextExpectedKey);
                 if (prevEl) prevEl.classList.remove('next-highlight');
             }
 
-            // ★ 修正後の次キー表示・無効キー判定ロジック
+            // ★ 新規：無効なキーか、リカバリー不能なミスかの判定
+            let isUndefined = false;
+            // 未確定の文字列が純粋なアルファベット記号類（ユーザーが物理的に打ったまま）の場合
+            if (extra.length > 0 && /^[a-zA-Z0-9-.,;:/@+*<>?]+$/.test(extra)) {
+                if (!validMapPrefixes.has(extra)) {
+                    isUndefined = true;
+                }
+            }
+
             if (!isValid) {
-                // 配列に定義されていないキーを打った場合は無反応
-                if (extra.length === 1 && !validMapPrefixes.has(extra)) {
-                    nextExpectedKey = null;
+                if (isUndefined) {
+                    nextExpectedKey = null; // 配列定義外のキーは光らせない
                 } else {
-                    nextExpectedKey = 'capslock'; // 修正不可能ならCapsを案内
+                    nextExpectedKey = 'capslock'; // ミス確定ならCapsを光らせてリカバリー案内
                 }
             } else {
-                let nextKey = recipe[extra];
-                nextExpectedKey = nextKey ? nextKey.toLowerCase() : null;
+                nextExpectedKey = searchResult.nextKey ? searchResult.nextKey.toLowerCase() : null;
             }
 
             if (nextExpectedKey) {
@@ -1272,29 +1286,33 @@
                   lastActiveTargetChar = activeChar || lastActiveTargetChar;
                 }
 
-                // ★ キャッシュを利用した超軽量レシピチェック
-                let remainingTarget = token.target.substring(currentMatch);
-                let nextKana = getFirstKana(remainingTarget);
-                let recipe = getRecipe(nextKana);
-
+                // ★ 新規：BFSによる確実なルート予測
+                let remainingTarget = targetReading.substring(matchLen);
                 let extra = remainingVal.substring(currentMatch);
-                let isValid = (extra in recipe) || (extra === "");
+                let searchResult = findNextKeyAndValidity(extra, remainingTarget);
+                let isValid = searchResult.isValid;
 
                 if (nextExpectedKey) {
                     const prevEl = document.getElementById('kb-key-' + nextExpectedKey);
                     if (prevEl) prevEl.classList.remove('next-highlight');
                 }
 
-                // ★ 修正後の次キー表示・無効キー判定ロジック
+                // ★ 新規：無効なキーか、リカバリー不能なミスかの判定
+                let isUndefined = false;
+                if (extra.length > 0 && /^[a-zA-Z0-9-.,;:/@+*<>?]+$/.test(extra)) {
+                    if (!validMapPrefixes.has(extra)) {
+                        isUndefined = true;
+                    }
+                }
+
                 if (!isValid) {
-                    if (extra.length === 1 && !validMapPrefixes.has(extra)) {
-                        nextExpectedKey = null;
+                    if (isUndefined) {
+                        nextExpectedKey = null; 
                     } else {
-                        nextExpectedKey = 'capslock';
+                        nextExpectedKey = 'capslock'; 
                     }
                 } else {
-                    let nextKey = recipe[extra];
-                    nextExpectedKey = nextKey ? nextKey.toLowerCase() : null;
+                    nextExpectedKey = searchResult.nextKey ? searchResult.nextKey.toLowerCase() : null;
                 }
 
                 if (nextExpectedKey) {
