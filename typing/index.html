@@ -183,9 +183,155 @@
   @keyframes blink { 50% { opacity: 0; } }
 
   .status-bar {
-    display: flex; justify-content: space-between; padding-top: 25px; padding-bottom: 25px; font-size: 20px; color: var(--status-text); border-top: 1px solid var(--border-line); position: sticky; bottom: 0; background-color: rgba(252, 251, 249, 0.95); z-index: 10; font-family: sans-serif;
+    display: flex; justify-content: space-between; padding-top: 25px; padding-bottom: 25px; font-size: 20px; color: var(--status-text); border-top: 1px solid var(--border-line); background-color: rgba(252, 251, 249, 0.95); font-family: sans-serif;
   }
   .val { color: var(--text-completed); font-weight: bold; }
+
+  /* ============================================================
+     ここから追加：右上パラメータ / 右下データ / 下部キーボードヒートマップ
+     ============================================================ */
+  body { padding-bottom: 200px; }
+
+  #stats-sidebar {
+    position: fixed;
+    top: 90px;
+    right: 20px;
+    width: 210px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    z-index: 30;
+    font-family: sans-serif;
+  }
+  .side-panel {
+    background: #ffffff;
+    border: 1px solid var(--border-line);
+    border-radius: 10px;
+    padding: 14px 16px;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.04);
+  }
+  .side-panel-title {
+    font-size: 13px;
+    font-weight: bold;
+    color: var(--status-text);
+    letter-spacing: 0.05em;
+    margin-bottom: 8px;
+  }
+  .metric-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    font-size: 13px;
+    color: var(--status-text);
+    padding: 3px 0;
+  }
+  .metric-value {
+    color: var(--text-completed);
+    font-weight: bold;
+    font-size: 15px;
+  }
+  .metric-value.warn { color: #e11d48; }
+
+  #mistake-sidebar {
+    position: fixed;
+    bottom: 160px;
+    right: 20px;
+    width: 210px;
+    z-index: 30;
+    font-family: sans-serif;
+  }
+  #mistake-list {
+    font-size: 13px;
+    color: var(--status-text);
+    max-height: 260px;
+    overflow-y: auto;
+  }
+  .mistake-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 5px 0;
+    border-bottom: 1px dashed var(--border-line);
+  }
+  .mistake-item:last-child { border-bottom: none; }
+  .mistake-kana {
+    font-size: 18px;
+    font-weight: bold;
+    color: var(--text-completed);
+  }
+  .mistake-tag {
+    font-size: 10px;
+    padding: 2px 6px;
+    border-radius: 10px;
+    margin-left: 6px;
+    font-weight: bold;
+  }
+  .mistake-tag.miss { background: rgba(225,29,72,0.12); color: #e11d48; }
+  .mistake-tag.slow { background: rgba(176,156,133,0.15); color: var(--status-text); }
+  .mistake-count { font-size: 11px; color: var(--status-text); }
+
+  #keyboard-heatmap-wrapper {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    background: rgba(255,255,255,0.97);
+    border-top: 1px solid var(--border-line);
+    box-shadow: 0 -4px 15px rgba(0,0,0,0.04);
+    padding: 10px 0 12px;
+    z-index: 40;
+    font-family: sans-serif;
+  }
+  #keyboard-heatmap-title {
+    text-align: center;
+    font-size: 11px;
+    color: var(--status-text);
+    font-weight: bold;
+    letter-spacing: 0.05em;
+    margin-bottom: 6px;
+  }
+  #keyboard-heatmap {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+  }
+  .kb-row {
+    display: flex;
+    gap: 4px;
+  }
+  .kb-key {
+    position: relative;
+    min-width: 30px;
+    height: 30px;
+    border-radius: 5px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    font-weight: bold;
+    color: #333;
+    background: #eee;
+    border: 1px solid rgba(0,0,0,0.05);
+    transition: background-color 0.3s ease;
+  }
+  .kb-key .kb-miss-badge {
+    position: absolute;
+    top: -6px;
+    right: -6px;
+    background: #e11d48;
+    color: #fff;
+    font-size: 9px;
+    line-height: 1;
+    padding: 2px 3px;
+    border-radius: 8px;
+    min-width: 12px;
+    text-align: center;
+  }
+
+  @media (max-width: 1300px) {
+    #stats-sidebar, #mistake-sidebar { display: none; }
+  }
 </style>
 </head>
 <body>
@@ -239,6 +385,35 @@
   <div>CPM: <span id="kpm" class="val">0</span></div>
 </div>
 
+<!-- ===================== 右上：速度・正確性パラメータ ===================== -->
+<div id="stats-sidebar">
+  <div class="side-panel">
+    <div class="side-panel-title">⚡ 速度</div>
+    <div class="metric-row"><span>CPM</span><span class="metric-value" id="stat-cpm">0</span></div>
+    <div class="metric-row"><span>MPM</span><span class="metric-value" id="stat-mpm">0</span></div>
+    <div class="metric-row"><span>KPM1 (KPM2)</span><span class="metric-value" id="stat-kpm12">0 (0)</span></div>
+  </div>
+  <div class="side-panel">
+    <div class="side-panel-title">🎯 正確性</div>
+    <div class="metric-row"><span>打鍵正確性</span><span class="metric-value" id="stat-key-acc">100%</span></div>
+    <div class="metric-row"><span>確定正確性</span><span class="metric-value" id="stat-confirm-acc">100%</span></div>
+  </div>
+</div>
+
+<!-- ===================== 右下：苦手な文字データ ===================== -->
+<div id="mistake-sidebar">
+  <div class="side-panel">
+    <div class="side-panel-title">🐢 苦手な文字</div>
+    <div id="mistake-list">まだデータがありません</div>
+  </div>
+</div>
+
+<!-- ===================== 下部：キー別ヒートマップ ===================== -->
+<div id="keyboard-heatmap-wrapper">
+  <div id="keyboard-heatmap-title">キー別ヒートマップ（色 = 速度 / 赤バッジ = ミス回数）</div>
+  <div id="keyboard-heatmap"></div>
+</div>
+
 <script>
   let customKeyMap = {
     ",": "、", ".": "。", "-": "ー", "?": "？", "!": "！"
@@ -270,6 +445,224 @@
   let isEnglishMode = false;
   let normalInputValue = "";
   let gameInputValue = "";
+
+  // ============================================================
+  // 追加：速度・正確性・苦手文字・キーヒートマップ用の状態
+  // ============================================================
+  let statsKpm1 = 0;              // 正解ルートの物理キー数
+  let statsKpm2 = 0;              // 実際に押した物理キー総数
+  let statsMistakeConfirmed = 0;  // 赤字確定回数
+  let statsDisplayCharsTotal = 0; // CPM用（画面表記ベースの確定文字数）
+  let statsMoraTotal = 0;         // MPM・確定正確性用（確定モーラ総数）
+
+  let lastCharStatus = null;      // 直近の描画で見た末尾文字の状態: 'match' | 'state' | 'mistake'
+  let lastActiveTargetChar = null;// 直近描画時に入力中だった対象「かな」1文字
+
+  let keyStats = {};   // { [物理キー]: {timeSum, timeCount, missCount, pressCount} }
+  let kanaStats = {};  // { [かな]: {timeSum, timeCount, missCount} }
+
+  let lastKeyTimestamp = null;
+  let skipNextTimingGap = true; // 行/単語の境目や開始直後は「思考時間」として計測を除外
+
+  function resetSessionStats() {
+    statsKpm1 = 0;
+    statsKpm2 = 0;
+    statsMistakeConfirmed = 0;
+    statsDisplayCharsTotal = 0;
+    statsMoraTotal = 0;
+    lastCharStatus = null;
+    lastActiveTargetChar = null;
+    keyStats = {};
+    kanaStats = {};
+    lastKeyTimestamp = null;
+    skipNextTimingGap = true;
+    renderHeatmap();
+    renderMistakeList();
+    updateStatsPanel(0);
+  }
+
+  // 拗音（ゃゅょ）は直前の文字と合わせて1モーラとして数える
+  function countMora(str) {
+    if (!str) return 0;
+    let count = 0;
+    for (const ch of str) {
+      if (/[ゃゅょャュョ]/.test(ch)) continue;
+      count++;
+    }
+    return count;
+  }
+
+  // 1行/1単語ぶんの「画面表記文字数」と「モーラ数」を計算
+  function computeLineMetrics(parsed) {
+    let displayChars = 0;
+    let moraCount = 0;
+    parsed.tokens.forEach(token => {
+      const disp = token.type === 'ruby' ? token.base : token.char;
+      displayChars += disp.length;
+      moraCount += countMora(token.target);
+    });
+    return { displayChars, moraCount };
+  }
+
+  // 1回分の打鍵を記録（デリミタ/デリート以外の実際の文字入力キー）
+  function recordKeystroke(rawKey) {
+    const now = performance.now();
+    let delta = null;
+    if (!skipNextTimingGap && lastKeyTimestamp !== null) {
+      delta = now - lastKeyTimestamp;
+    }
+    lastKeyTimestamp = now;
+    skipNextTimingGap = false;
+
+    statsKpm2++;
+    const physKey = (rawKey && rawKey.length === 1) ? rawKey.toLowerCase() : rawKey;
+    if (!keyStats[physKey]) keyStats[physKey] = { timeSum: 0, timeCount: 0, missCount: 0, pressCount: 0 };
+    const ks = keyStats[physKey];
+    ks.pressCount++;
+    if (delta !== null) { ks.timeSum += delta; ks.timeCount++; }
+
+    const targetKana = lastActiveTargetChar;
+    if (lastCharStatus === 'mistake') {
+      statsMistakeConfirmed++;
+      ks.missCount++;
+      if (targetKana) {
+        if (!kanaStats[targetKana]) kanaStats[targetKana] = { timeSum: 0, timeCount: 0, missCount: 0 };
+        kanaStats[targetKana].missCount++;
+      }
+    } else {
+      statsKpm1++;
+    }
+
+    if (targetKana && delta !== null) {
+      if (!kanaStats[targetKana]) kanaStats[targetKana] = { timeSum: 0, timeCount: 0, missCount: 0 };
+      kanaStats[targetKana].timeSum += delta;
+      kanaStats[targetKana].timeCount++;
+    }
+  }
+
+  // デリート系キー（バックスペース・CapsLock等）：KPM2にのみ反映
+  function recordDeletion() {
+    statsKpm2++;
+    lastKeyTimestamp = performance.now();
+  }
+
+  function updateStatsPanel(elapsedSeconds) {
+    const cpmEl = document.getElementById('stat-cpm');
+    const mpmEl = document.getElementById('stat-mpm');
+    const kpm12El = document.getElementById('stat-kpm12');
+    const keyAccEl = document.getElementById('stat-key-acc');
+    const confirmAccEl = document.getElementById('stat-confirm-acc');
+    if (!cpmEl) return;
+
+    const minutes = elapsedSeconds / 60;
+    const cpm = minutes > 0 ? Math.round(statsDisplayCharsTotal / minutes) : 0;
+    const mpm = minutes > 0 ? Math.round(statsMoraTotal / minutes) : 0;
+    const kpm1 = minutes > 0 ? Math.round(statsKpm1 / minutes) : 0;
+    const kpm2 = minutes > 0 ? Math.round(statsKpm2 / minutes) : 0;
+
+    cpmEl.textContent = cpm;
+    mpmEl.textContent = mpm;
+    kpm12El.textContent = `${kpm1} (${kpm2})`;
+
+    const keyAcc = statsKpm2 > 0 ? (statsKpm1 / statsKpm2 * 100) : 100;
+    const confirmAcc = statsMoraTotal > 0 ? ((1 - statsMistakeConfirmed / statsMoraTotal) * 100) : 100;
+
+    keyAccEl.textContent = keyAcc.toFixed(1) + '%';
+    keyAccEl.className = 'metric-value' + (keyAcc < 90 ? ' warn' : '');
+    confirmAccEl.textContent = confirmAcc.toFixed(1) + '%';
+    confirmAccEl.className = 'metric-value' + (confirmAcc < 90 ? ' warn' : '');
+  }
+
+  function renderMistakeList() {
+    const listEl = document.getElementById('mistake-list');
+    if (!listEl) return;
+
+    const entries = Object.keys(kanaStats).map(kana => {
+      const s = kanaStats[kana];
+      const avgTime = s.timeCount > 0 ? s.timeSum / s.timeCount : null;
+      return { kana, missCount: s.missCount, avgTime };
+    });
+
+    if (entries.length === 0) {
+      listEl.innerHTML = 'まだデータがありません';
+      return;
+    }
+
+    const timedEntries = entries.filter(e => e.avgTime !== null);
+    const overallAvg = timedEntries.length > 0
+      ? timedEntries.reduce((sum, e) => sum + e.avgTime, 0) / timedEntries.length
+      : 0;
+    const slowThreshold = overallAvg * 1.6;
+
+    const flagged = entries.filter(e => e.missCount > 0 || (e.avgTime !== null && overallAvg > 0 && e.avgTime > slowThreshold));
+
+    flagged.sort((a, b) => {
+      const scoreA = a.missCount * 1000 + (a.avgTime || 0);
+      const scoreB = b.missCount * 1000 + (b.avgTime || 0);
+      return scoreB - scoreA;
+    });
+
+    if (flagged.length === 0) {
+      listEl.innerHTML = '苦手な文字はまだありません👍';
+      return;
+    }
+
+    let html = '';
+    flagged.slice(0, 10).forEach(e => {
+      let tags = '';
+      if (e.missCount > 0) tags += `<span class="mistake-tag miss">ミス x${e.missCount}</span>`;
+      if (e.avgTime !== null && overallAvg > 0 && e.avgTime > slowThreshold) {
+        tags += `<span class="mistake-tag slow">${Math.round(e.avgTime)}ms</span>`;
+      }
+      html += `<div class="mistake-item"><span class="mistake-kana">${escapeHTML(e.kana)}</span><span>${tags}</span></div>`;
+    });
+    listEl.innerHTML = html;
+  }
+
+  // US配列ベースのキーボードレイアウト（HSW配列の物理キーはローマ字入力と同じ位置なのでこれで代用）
+  const KEYBOARD_ROWS = [
+    ['1','2','3','4','5','6','7','8','9','0','-'],
+    ['q','w','e','r','t','y','u','i','o','p'],
+    ['a','s','d','f','g','h','j','k','l',';'],
+    ['z','x','c','v','b','n','m',',','.','/']
+  ];
+
+  function timeToColor(t, minT, maxT) {
+    if (t === null || maxT <= minT) return '#eee';
+    const ratio = Math.max(0, Math.min(1, (t - minT) / (maxT - minT)));
+    // 緑（速い）→ 黄 → 赤（遅い）
+    const hue = (1 - ratio) * 120; // 120=緑, 0=赤
+    return `hsl(${hue}, 65%, 70%)`;
+  }
+
+  function renderHeatmap() {
+    const container = document.getElementById('keyboard-heatmap');
+    if (!container) return;
+
+    const avgTimes = Object.keys(keyStats)
+      .map(k => keyStats[k].timeCount > 0 ? keyStats[k].timeSum / keyStats[k].timeCount : null)
+      .filter(t => t !== null);
+    const minT = avgTimes.length > 0 ? Math.min(...avgTimes) : 0;
+    const maxT = avgTimes.length > 0 ? Math.max(...avgTimes) : 0;
+
+    let html = '';
+    KEYBOARD_ROWS.forEach(row => {
+      html += '<div class="kb-row">';
+      row.forEach(key => {
+        const s = keyStats[key];
+        let bg = '#eee';
+        let missBadge = '';
+        if (s) {
+          const avgTime = s.timeCount > 0 ? s.timeSum / s.timeCount : null;
+          bg = timeToColor(avgTime, minT, maxT);
+          if (s.missCount > 0) missBadge = `<span class="kb-miss-badge">${s.missCount}</span>`;
+        }
+        html += `<div class="kb-key" style="background-color:${bg};">${escapeHTML(key)}${missBadge}</div>`;
+      });
+      html += '</div>';
+    });
+    container.innerHTML = html;
+  }
 
   function setInputMode(isEnglish) {
       if (isEnglishMode === isEnglish) return;
@@ -485,6 +878,9 @@
       const elapsed = (Date.now() - startTime) / 1000;
       timeSpan.textContent = elapsed.toFixed(1) + 's';
       if (elapsed > 0) kpmSpan.textContent = Math.round(totalChars / (elapsed / 60));
+      updateStatsPanel(elapsed);
+      renderHeatmap();
+      renderMistakeList();
     }, 100);
   }
 
@@ -543,6 +939,7 @@
       startTime = null;
       clearInterval(timerInterval);
       clearInterval(gameInterval);
+      resetSessionStats();
       
       timeSpan.textContent = '0.0s';
       kpmSpan.textContent = '0';
@@ -570,6 +967,7 @@
     gameTimer = 60.0;
     totalChars = 0;
     startTime = Date.now();
+    resetSessionStats();
     
     document.getElementById('game-score-val').innerText = gameScore;
     document.getElementById('game-time-text').innerText = gameTimer.toFixed(1);
@@ -588,6 +986,9 @@
       
       timeSpan.textContent = elapsed.toFixed(1) + 's';
       if(elapsed > 0) kpmSpan.textContent = Math.round(totalChars / (elapsed / 60));
+      updateStatsPanel(elapsed);
+      renderHeatmap();
+      renderMistakeList();
 
       if (gameTimer <= 0) {
           endGame();
@@ -651,12 +1052,14 @@
               const activeRuby = remainingRuby.substring(0, 1);
               const futureRuby = remainingRuby.substring(1);
               pLayer = `<ruby><span style="opacity: 0.8; color: var(--text-completed); font-weight:bold;">${token.base}</span><rt><span style="visibility:hidden">${hiddenRuby}</span><span style="color: var(--text-active-prompt); font-weight:bold;">${activeRuby}</span><span style="color: var(--text-upcoming);">${futureRuby}</span></rt></ruby>`;
+              lastActiveTargetChar = activeRuby || lastActiveTargetChar;
             } else {
               const hiddenChar = token.char.substring(0, currentMatch);
               const remainingChar = token.char.substring(currentMatch);
               const activeChar = remainingChar.substring(0, 1);
               const futureChar = remainingChar.substring(1);
               pLayer = `<span style="visibility:hidden">${hiddenChar}</span><span style="opacity: 1; color: var(--text-active-prompt); font-weight:bold;">${activeChar}</span><span style="color: var(--text-upcoming); font-weight:bold;">${futureChar}</span>`;
+              lastActiveTargetChar = activeChar || lastActiveTargetChar;
             }
 
             let typedText = "";
@@ -671,6 +1074,7 @@
             typedText = `<span style="color: var(--text-completed); font-weight: bold;">${escapeHTML(typedText)}</span>`;
             
             let extra = remainingVal.substring(currentMatch);
+            let frameLastStatus = 'match';
             for (let j = 0; j < extra.length; j++) {
               let char = extra[j];
               let targetChar = currentWordObj.targetLine[matchLen + j];
@@ -679,10 +1083,13 @@
               
               if (/[ァ-ヶA-Za-z0-9ー]/.test(char) || isBridgeChar(char, targetChar)) {
                 typedText += `<span class="state">${escapeHTML(char)}</span>`;
+                frameLastStatus = 'state';
               } else {
                 typedText += `<span class="mistake">${escapeHTML(char)}</span>`;
+                frameLastStatus = 'mistake';
               }
             }
+            lastCharStatus = frameLastStatus;
             
             if(typedText === "") typedText = `<span style="visibility:hidden;">_</span>`;
 
@@ -717,6 +1124,7 @@
     if (e.code === 'CapsLock' || e.key === 'Alphanumeric' || e.code === 'Lang2' || e.key === 'Backspace') {
       e.preventDefault();
       gameInputValue = gameInputValue.slice(0, -1);
+      recordDeletion();
       handleGameInputUpdate();
       return;
     }
@@ -725,6 +1133,7 @@
       e.preventDefault();
       gameInputValue += e.key;
       handleGameInputUpdate();
+      recordKeystroke(e.key);
     }
   });
 
@@ -763,6 +1172,10 @@
 
     if (matchVal === matchTarget && matchTarget.length > 0 && !hasState) {
         totalChars += currentWordObj.targetLine.length;
+        const { displayChars, moraCount } = computeLineMetrics(currentWordObj);
+        statsDisplayCharsTotal += displayChars;
+        statsMoraTotal += moraCount;
+        skipNextTimingGap = true;
         gameScore++;
         document.getElementById('game-score-val').innerText = gameScore;
         
@@ -880,12 +1293,14 @@
                   const activeRuby = remainingRuby.substring(0, 1);
                   const futureRuby = remainingRuby.substring(1);
                   pLayer = `<ruby><span style="opacity: 0.8; color: var(--text-completed); font-weight:bold;">${token.base}</span><rt><span style="visibility:hidden">${hiddenRuby}</span><span style="color: var(--text-active-prompt); font-weight:bold;">${activeRuby}</span><span style="color: var(--text-upcoming);">${futureRuby}</span></rt></ruby>`;
+                  lastActiveTargetChar = activeRuby || lastActiveTargetChar;
                 } else {
                   const hiddenChar = token.char.substring(0, currentMatch);
                   const remainingChar = token.char.substring(currentMatch);
                   const activeChar = remainingChar.substring(0, 1);
                   const futureChar = remainingChar.substring(1);
                   pLayer = `<ruby><span style="visibility:hidden">${hiddenChar}</span><span style="opacity: 1; color: var(--text-active-prompt); font-weight:bold;">${activeChar}</span><span style="color: var(--text-upcoming); font-weight:bold;">${futureChar}</span><rt style="visibility:hidden">_</rt></ruby>`;
+                  lastActiveTargetChar = activeChar || lastActiveTargetChar;
                 }
 
                 let typedText = "";
@@ -900,6 +1315,7 @@
                 typedText = `<span style="color: var(--text-completed); font-weight: bold;">${escapeHTML(typedText)}</span>`;
                 
                 let extra = remainingVal.substring(currentMatch);
+                let frameLastStatus = 'match';
                 for (let j = 0; j < extra.length; j++) {
                   let char = extra[j];
                   let targetChar = parsed.targetLine[matchLen + j];
@@ -908,10 +1324,13 @@
                   
                   if (/[ァ-ヶA-Za-z0-9ー]/.test(char) || isBridgeChar(char, targetChar)) {
                     typedText += `<span class="state">${escapeHTML(char)}</span>`;
+                    frameLastStatus = 'state';
                   } else {
                     typedText += `<span class="mistake">${escapeHTML(char)}</span>`;
+                    frameLastStatus = 'mistake';
                   }
                 }
+                lastCharStatus = frameLastStatus;
                 
                 if(typedText === "") typedText = `<span style="visibility:hidden;">_</span>`;
 
@@ -967,6 +1386,10 @@
 
             if (matchVal === matchTarget && matchTarget.length > 0 && !hasState) {
               totalChars += parsed.targetLine.length;
+              const { displayChars, moraCount } = computeLineMetrics(parsed);
+              statsDisplayCharsTotal += displayChars;
+              statsMoraTotal += moraCount;
+              skipNextTimingGap = true; // 次の行の最初の1打は「思考時間」なので計測除外
               currentIndex++;
               renderLines();
               
@@ -984,6 +1407,7 @@
             if (e.code === 'CapsLock' || e.key === 'Alphanumeric' || e.code === 'Lang2' || e.key === 'Backspace') {
               e.preventDefault();
               normalInputValue = normalInputValue.slice(0, -1);
+              recordDeletion();
               checkInput();
               return;
             }
@@ -992,6 +1416,7 @@
               e.preventDefault();
               normalInputValue += e.key;
               checkInput();
+              recordKeystroke(e.key);
             }
           });
 
