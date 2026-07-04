@@ -505,17 +505,6 @@
 
       dfs("", "", new Set([""]));
 
-      for (let k in customKeyMap) {
-          let val = customKeyMap[k];
-          let isUnfinished = /[ァ-ヶ]/.test(val) && val !== 'ー' && val !== 'ヴ';
-          if (!isUnfinished && val.length > 0) {
-              let norm = normalizeForMatch(val);
-              if (!validPathsForKana[norm]) validPathsForKana[norm] = [];
-              if (!validPathsForKana[norm].includes(k)) {
-                  validPathsForKana[norm].push(k);
-              }
-          }
-      }
   }
 
   // 入力中にO(1)で即座に「ルートの正当性」と「次キー」を割り出す
