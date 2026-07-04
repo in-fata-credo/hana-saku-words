@@ -442,50 +442,7 @@
   let skipNextTimingGap = true;
   let nextExpectedKey = null;
 
-  // ============================================================
-  // ★ 完全版：BFSを排除した軽量な「辞書逆引き」アルゴリズム
-  // ============================================================
-  let validPathsForKana = {}; 
-  let validKeyChars = [];
-
-  function initSearchCaches() {
-      let physicalKeys = new Set();
-      for (let k in customKeyMap) {
-          for(let char of k) {
-              if (!/[ァ-ヶぁ-ん]/.test(char)) physicalKeys.add(char.toLowerCase());
-          }
-      }
-      "abcdefghijklmnopqrstuvwxyz-.,;:/@+*<>?1234567890".split('').forEach(c => physicalKeys.add(c));
-      validKeyChars = Array.from(physicalKeys);
-      
-      validPathsForKana = {};
-      
-      // BFSは「起動時に1回だけ」実行して辞書を作る。入力中は一切使わない。
-      let queue = [""];
-      while(queue.length > 0) {
-          let curr = queue.shift();
-          
-          if (curr !== "") {
-              let evalStr = applyCustomIME(curr);
-              let hasUnfinishedKatakana = /[ァ-ヶ]/.test(evalStr) && evalStr !== 'ー' && evalStr !== 'ヴ';
-              
-              if (!hasUnfinishedKatakana && evalStr.length > 0) {
-                  let norm = normalizeForMatch(evalStr);
-                  if (!validPathsForKana[norm]) validPathsForKana[norm] = [];
-                  validPathsForKana[norm].push(curr);
-                  continue; // かなが完成したら、その先は探索しない（大幅な枝刈り）
-              }
-          }
-          
-          if (curr.length >= 4) continue; 
-          
-          for (let c of validKeyChars) {
-              queue.push(curr + c);
-          }
-      }
-  }
-
-  // 入力中にO(1)で即座に「ルートの正当性」と「次キー」を割り出す関数
+initSearchCaches  // 入力中にO(1)で即座に「ルートの正当性」と「次キー」を割り出す関数
   function getNextKeyInfo(unconfirmedRaw, remainingTarget) {
       if (remainingTarget.length === 0) return { isValid: true, nextKey: null };
       
