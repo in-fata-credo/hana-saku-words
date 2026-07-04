@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>花咲く言葉 (HSW配列) - タイピングプラクティス v28.08</title>
+<title>花咲く言葉 (HSW配列) - タイピングプラクティス v28.06</title>
 <style>
   :root {
     --bg-color: #fcfbf9; 
@@ -262,12 +262,12 @@
   }
   
   /* ============================================================
-     ★ 修正：キーボードレイアウト（QWERTY準拠の段ズレ表現）
+     ★ 修正：キーボードレイアウトとズレ表現
      ============================================================ */
   #keyboard-heatmap {
     display: flex;
     flex-direction: column;
-    align-items: flex-start; 
+    align-items: flex-start; /* margin-leftを効かせるため */
     gap: 4px;
     width: fit-content;
     margin: 0 auto;
@@ -305,7 +305,6 @@
     text-align: center;
   }
 
-  /* 次キー推測・ミスのCapsハイライト */
   .kb-key.next-highlight {
     background-color: #000000 !important;
     color: #ff3333 !important;
@@ -325,7 +324,7 @@
 <body>
 
 <div class="header">
-  <h2>✿ 花咲く言葉 - タイピングの庭 v28.08</h2>
+  <h2>✿ 花咲く言葉 - タイピングの庭 v28.06</h2>
   <button class="settings-btn" id="toggle-settings" title="設定・コース選択">⚙️</button>
 </div>
 
@@ -423,7 +422,6 @@
   let gameWordsPool = [];
   let currentWordObj = null;
 
-  let isEnglishMode = false;
   let normalInputValue = "";
   let gameInputValue = "";
 
@@ -444,112 +442,60 @@
   let nextExpectedKey = null;
 
   // ============================================================
-  // ★ 完全版：BFSを排除した軽量な「辞書逆引き」アルゴリズム
+  // ★ ルート予測アルゴリズムとプレフィックス管理（軽量・逆引き版）
+  //   customKeyMap を「値（かな側）が残りターゲットの前方一致になっているか」で
+  //   直接逆引きする方式。BFSによる組み合わせ爆発を起こさない。
   // ============================================================
-  let validPathsForKana = {}; 
-  let validKeyChars = [];
-  let validMapPrefixes = new Set();
+  let searchCache = {};
+  let validMapPrefixes = new Set(); // 無効キー判定用
+  let keyMapEntries = []; // {key, val} のリスト。val(かな)の長い順にソート
 
   function initSearchCaches() {
       validMapPrefixes.clear();
-      let physicalKeys = new Set();
-      
+      keyMapEntries = [];
       for (let k in customKeyMap) {
-          if (k.length === 1 && !/[ァ-ヶぁ-ん]/.test(k)) {
-              physicalKeys.add(k.toLowerCase());
-          }
-          for(let i = 1; i <= k.length; i++) {
+          // 配列定義のプレフィックスを全て登録（未定義キー判定用）
+          for (let i = 1; i <= k.length; i++) {
               validMapPrefixes.add(k.substring(0, i));
           }
+          keyMapEntries.push({ key: k, val: customKeyMap[k] });
       }
-      "abcdefghijklmnopqrstuvwxyz-.,;:/@+*<>?1234567890".split('').forEach(c => physicalKeys.add(c));
-      validKeyChars = Array.from(physicalKeys);
-      
-      validPathsForKana = {};
-      let transitionMap = {};
-      
-      for (let k in customKeyMap) {
-          let val = customKeyMap[k];
-          let prefix = k.slice(0, -1);
-          let trigger = k.slice(-1);
-          if (!transitionMap[prefix]) transitionMap[prefix] = [];
-          transitionMap[prefix].push({ trigger: trigger, result: val });
-      }
-
-      // グラフ探索（DFS）で、初期状態から全ルートを一瞬で割り出す
-      function dfs(currentState, currentRawPath, visitedStates) {
-          if (currentRawPath.length >= 6) return;
-
-          let transitions = transitionMap[currentState];
-          if (transitions) {
-              for (let t of transitions) {
-                  let nextState = t.result;
-                  let nextRawPath = currentRawPath + t.trigger;
-                  
-                  if (visitedStates.has(nextState)) continue;
-
-                  let isUnfinished = /[ァ-ヶ]/.test(nextState) && nextState !== 'ー' && nextState !== 'ヴ';
-                  
-                  if (!isUnfinished && nextState.length > 0) {
-                      let norm = normalizeForMatch(nextState);
-                      if (!validPathsForKana[norm]) validPathsForKana[norm] = [];
-                      validPathsForKana[norm].push(nextRawPath);
-                  }
-
-                  let newVisited = new Set(visitedStates);
-                  newVisited.add(nextState);
-                  dfs(nextState, nextRawPath, newVisited);
-              }
-          }
-      }
-
-      dfs("", "", new Set([""]));
-
-      for (let k in customKeyMap) {
-          let val = customKeyMap[k];
-          let isUnfinished = /[ァ-ヶ]/.test(val) && val !== 'ー' && val !== 'ヴ';
-          if (!isUnfinished && val.length > 0) {
-              let norm = normalizeForMatch(val);
-              if (!validPathsForKana[norm]) validPathsForKana[norm] = [];
-              if (!validPathsForKana[norm].includes(k)) {
-                  validPathsForKana[norm].push(k);
-              }
-          }
-      }
+      // 拗音・促音・長音などの複数文字かなを優先的に選べるよう、val(かな側)の長い順にソート
+      keyMapEntries.sort((a, b) => b.val.length - a.val.length);
+      searchCache = {};
   }
 
-  // 入力中にO(1)で即座に「ルートの正当性」と「次キー」を割り出す
-  function getNextKeyInfo(unconfirmedRaw, remainingTarget) {
-      if (remainingTarget.length === 0) return { isValid: true, nextKey: null };
-      
-      let possiblePaths = [];
-      // ターゲットの先頭1〜3文字（きゃ等）の辞書をチェック
-      for (let len = 1; len <= Math.min(3, remainingTarget.length); len++) {
-          let chunk = normalizeForMatch(remainingTarget.substring(0, len));
-          if (validPathsForKana[chunk]) {
-              possiblePaths.push(...validPathsForKana[chunk]);
+  // ★ 修正：BFSをやめ、customKeyMapを直接逆引きする軽量な次キー予測。
+  //   「バッファ(未確定のローマ字)がキーの前方一致になっているか」かつ
+  //   「そのキーの変換結果(かな)が残りターゲットの前方一致になっているか」だけを見る。
+  //   組み合わせ爆発が起きず、拗音・促音・長音などの複数文字かなも正しく扱える。
+  function findNextKeyAndValidity(buffer, remainingTarget) {
+      if (!remainingTarget) return { isValid: true, nextKey: null };
+
+      let cacheKey = buffer + "|" + remainingTarget;
+      if (searchCache[cacheKey]) return searchCache[cacheKey];
+
+      let isValid = false;
+      let nextKey = null;
+
+      for (const entry of keyMapEntries) {
+          if (entry.key.length < buffer.length) continue;
+          if (!entry.key.startsWith(buffer)) continue;
+          if (!remainingTarget.startsWith(entry.val)) continue;
+
+          // ここまで来た時点で、bufferの続きとしてentry.keyを打てば
+          // remainingTargetの先頭と一致する ⇒ 有効な経路
+          isValid = true;
+          if (entry.key.length > buffer.length) {
+              // val(かな)の長い順にソート済みなので、最初に見つかったものを採用すればよい
+              nextKey = entry.key[buffer.length];
+              break;
           }
       }
-      
-      if (possiblePaths.length === 0) return { isValid: false, nextKey: null };
-      
-      // 生の物理キー入力が、正解ルート文字列の「前方一致」になっているものを抽出
-      let matchingPaths = possiblePaths.filter(p => p.startsWith(unconfirmedRaw));
-      
-      if (matchingPaths.length === 0) {
-          return { isValid: false, nextKey: null };
-      }
-      
-      // 一致したパスの中で最も短いもの（最短リカバリーまたは最短入力）を案内する
-      matchingPaths.sort((a, b) => a.length - b.length);
-      
-      let bestPath = matchingPaths[0];
-      let nextKey = null;
-      if (bestPath.length > unconfirmedRaw.length) {
-          nextKey = bestPath[unconfirmedRaw.length];
-      }
-      
-      return { isValid: true, nextKey: nextKey };
+
+      let result = { isValid, nextKey };
+      searchCache[cacheKey] = result;
+      return result;
   }
 
   function resetSessionStats() {
@@ -704,11 +650,11 @@
     listEl.innerHTML = html;
   }
 
-  // ★ 新しいキーボードレイアウト定義（不要キー無地化・Caps/ズレ対応）
+  // ★ 新しいキーボードレイアウト定義（ズレ対応と不要キーの無地化）
   const KEYBOARD_LAYOUT = [
-    { spacer: '0px', keys: [{id: 'q', label: 'q'}, {id: 'w', label: 'w'}, {id: 'e', label: 'e'}, {id: 'r', label: 'r'}, {id: 't', label: ''}, {id: 'y', label: 'y'}, {id: 'u', label: 'u'}, {id: 'i', label: 'i'}, {id: 'o', label: 'o'}, {id: 'p', label: 'p'}, {id: '@', label: '@'}] },
-    { spacer: '10px', keys: [{id: 'capslock', label: 'Caps', width: '50px'}, {id: 'a', label: 'a'}, {id: 's', label: 's'}, {id: 'd', label: 'd'}, {id: 'f', label: 'f'}, {id: 'g', label: 'g'}, {id: 'h', label: 'h'}, {id: 'j', label: 'j'}, {id: 'k', label: 'k'}, {id: 'l', label: 'l'}, {id: ';', label: ';'}, {id: ':', label: ':'}] },
-    { spacer: '75px', keys: [{id: 'z', label: ''}, {id: 'x', label: ''}, {id: 'c', label: ''}, {id: 'v', label: 'v'}, {id: 'b', label: ''}, {id: 'n', label: ''}, {id: 'm', label: ''}, {id: ',', label: ''}, {id: '.', label: ''}, {id: '/', label: ''}] }
+    { spacer: '20px', keys: [{id: 'q', label: 'q'}, {id: 'w', label: 'w'}, {id: 'e', label: 'e'}, {id: 'r', label: 'r'}, {id: 't', label: ''}, {id: 'y', label: 'y'}, {id: 'u', label: 'u'}, {id: 'i', label: 'i'}, {id: 'o', label: 'o'}, {id: 'p', label: 'p'}, {id: '@', label: '@'}] },
+    { spacer: '0px', keys: [{id: 'capslock', label: 'Caps', width: '40px'}, {id: 'a', label: 'a'}, {id: 's', label: 's'}, {id: 'd', label: 'd'}, {id: 'f', label: 'f'}, {id: 'g', label: 'g'}, {id: 'h', label: 'h'}, {id: 'j', label: 'j'}, {id: 'k', label: 'k'}, {id: 'l', label: 'l'}, {id: ';', label: ';'}, {id: ':', label: ':'}] },
+    { spacer: '60px', keys: [{id: 'z', label: ''}, {id: 'x', label: ''}, {id: 'c', label: ''}, {id: 'v', label: 'v'}, {id: 'b', label: ''}, {id: 'n', label: ''}, {id: 'm', label: ''}, {id: ',', label: ''}, {id: '.', label: ''}, {id: '/', label: ''}] }
   ];
 
   function timeToColor(t, minT, maxT) {
@@ -736,6 +682,7 @@
         let bg = '#eee';
         let missBadge = '';
         
+        // ラベルがある場合のみ色付けとバッジ表示
         if (s && keyObj.label !== '') {
           const avgTime = s.timeCount > 0 ? s.timeSum / s.timeCount : null;
           bg = timeToColor(avgTime, minT, maxT);
@@ -749,46 +696,6 @@
       html += '</div>';
     });
     container.innerHTML = html;
-  }
-
-  function setInputMode(isEnglish) {
-      if (isEnglishMode === isEnglish) return;
-      isEnglishMode = isEnglish;
-  }
-
-  let shiftRightDownTime = 0;
-  let shiftRightModifierUsed = false;
-
-  function handleShiftTapDown(e) {
-      if (e.code === 'ShiftRight') {
-          shiftRightDownTime = performance.now();
-          shiftRightModifierUsed = false;
-      } else if (e.shiftKey) {
-          shiftRightModifierUsed = true;
-      }
-  }
-
-  function handleShiftTapUp(e) {
-      if (e.code === 'ShiftRight') {
-          const heldTime = performance.now() - shiftRightDownTime;
-          if (!shiftRightModifierUsed && heldTime < 400) {
-              setInputMode(true);
-          }
-      }
-  }
-
-  function checkModeSwitchKeys(e) {
-      if (e.code === 'NonConvert' || e.key === 'NonConvert' || e.keyCode === 29) {
-          e.preventDefault();
-          setInputMode(true);
-          return true;
-      }
-      if (e.code === 'Convert' || e.key === 'Convert' || e.keyCode === 28) {
-          e.preventDefault();
-          setInputMode(false);
-          return true;
-      }
-      return false;
   }
 
   async function initApp() {
@@ -832,7 +739,7 @@
         }
       });
       
-      initSearchCaches(); // ★ 起動時に全ルートの辞書を生成
+      initSearchCaches(); // ★ 起動時にキャッシュ準備
 
       courseData = await courseRes.json();
       buildDropdown();
@@ -885,14 +792,6 @@
     if (!str) return "";
     return str.replace(/[\u3041-\u3096]/g, match => String.fromCharCode(match.charCodeAt(0) + 0x60));
   };
-
-  function normalizeForMatch(str) {
-      if (!str) return "";
-      let s = str.replace(/[Ａ-Ｚａ-ｚ０-９]/g, function(c) {
-          return String.fromCharCode(c.charCodeAt(0) - 0xFEE0);
-      });
-      return s.replace(/[\u30A1-\u30F6]/g, match => String.fromCharCode(match.charCodeAt(0) - 0x60)).toLowerCase();
-  }
 
   function applyCustomIME(inputStr) {
     let result = "";
@@ -1048,75 +947,37 @@
     visualWrapper.classList.remove('pop-anim');
     void visualWrapper.offsetWidth; 
     
-    updateGameVisuals('', currentWordObj);
+    updateGameVisuals('');
     document.getElementById('game-real-input').focus();
   }
 
-  // ★ 統合された描画・次キー推測エンジン（完全逆引き対応版）
-  function updateGameVisuals(rawVal, wordObj) {
-    if(!wordObj) return;
+  function updateGameVisuals(val) {
+    if(!currentWordObj) return;
 
-    let targetReading = wordObj.tokens.map(t => t.target).join('');
+    let targetReading = currentWordObj.tokens.map(t => t.target).join('');
     
-    let confirmedRawLen = 0;
-    let confirmedHiraLen = 0;
-    let step = 1;
-    while (step <= rawVal.length) {
-        let testRaw = rawVal.substring(confirmedRawLen, step);
-        let evalStr = applyCustomIME(testRaw);
-        
-        let hasUnfinishedKatakana = /[ァ-ヶ]/.test(evalStr) && evalStr !== 'ー' && evalStr !== 'ヴ';
-        if (!hasUnfinishedKatakana) {
-            let normEval = normalizeForMatch(evalStr);
-            let remTarget = targetReading.substring(confirmedHiraLen);
-            if (normEval.length > 0 && remTarget.startsWith(normEval)) {
-                confirmedRawLen = step;
-                confirmedHiraLen += normEval.length;
-                continue;
-            }
+    let adjustedVal = "";
+    for (let i = 0; i < val.length; i++) {
+        let typedChar = val[i];
+        let targetChar = targetReading[i];
+        if (targetChar && hiraToKata(typedChar) === targetChar) {
+            typedChar = targetChar;
         }
-        step++;
+        adjustedVal += typedChar;
     }
 
-    let unconfirmedRaw = rawVal.substring(confirmedRawLen);
-    let remainingTargetForKeys = targetReading.substring(confirmedHiraLen);
-    
-    // ★ 辞書逆引きで瞬時にパスチェック
-    let keyInfo = getNextKeyInfo(unconfirmedRaw, remainingTargetForKeys);
-    let isValidRoute = keyInfo.isValid;
-    
-    if (nextExpectedKey) {
-        const prevEl = document.getElementById('kb-key-' + nextExpectedKey);
-        if (prevEl) prevEl.classList.remove('next-highlight');
+    let matchLen = 0;
+    for (let i = 0; i < adjustedVal.length; i++) {
+        if (adjustedVal[i] === targetReading[i]) matchLen++;
+        else break;
     }
 
-    // ★ 無効キー・CapsLockの制御
-    if (!isValidRoute) {
-        if (unconfirmedRaw.length > 0) {
-            // 配列に定義されていない無関係なキー（z等）なら無反応
-            if (!validMapPrefixes.has(unconfirmedRaw) && unconfirmedRaw.length === 1) {
-                nextExpectedKey = null; 
-            } else {
-                nextExpectedKey = 'capslock'; // 回復不能なミス
-            }
-        }
-    } else {
-        nextExpectedKey = keyInfo.nextKey ? keyInfo.nextKey.toLowerCase() : null;
-    }
-
-    if (nextExpectedKey) {
-        const nextEl = document.getElementById('kb-key-' + nextExpectedKey);
-        if (nextEl) nextEl.classList.add('next-highlight');
-    }
-
-    let evalUnconfirmed = applyCustomIME(unconfirmedRaw);
-    let currentMatch = confirmedHiraLen;
-    let remainingVal = evalUnconfirmed; 
+    let remainingVal = val;
+    let currentMatch = matchLen;
     let caretDrawn = false;
-    
     let html = '<div class="visual-tokens-container" style="justify-content: center;">';
 
-    for (const token of wordObj.tokens) {
+    for (const token of currentWordObj.tokens) {
         html += '<div class="token-wrapper">';
         let pLayer = '';
         let iLayer = '';
@@ -1125,32 +986,74 @@
             pLayer = `<span style="visibility:hidden; user-select:none;">${token.type === 'ruby' ? token.base : token.char}</span>`;
             iLayer = `<span style="color: var(--text-completed); font-weight: bold;">${token.type === 'ruby' ? token.base : token.char}</span>`;
             currentMatch -= token.target.length;
+            remainingVal = remainingVal.substring(token.target.length);
         } else if (!caretDrawn) {
             caretDrawn = true;
             if (token.type === 'ruby') {
               const hiddenRuby = token.ruby.substring(0, currentMatch);
-              const remRuby = token.ruby.substring(currentMatch);
-              const activeRuby = remRuby.substring(0, 1);
-              const futureRuby = remRuby.substring(1);
+              const remainingRuby = token.ruby.substring(currentMatch);
+              const activeRuby = remainingRuby.substring(0, 1);
+              const futureRuby = remainingRuby.substring(1);
               pLayer = `<ruby><span style="opacity: 0.8; color: var(--text-completed); font-weight:bold;">${token.base}</span><rt><span style="visibility:hidden">${hiddenRuby}</span><span style="color: var(--text-active-prompt); font-weight:bold;">${activeRuby}</span><span style="color: var(--text-upcoming);">${futureRuby}</span></rt></ruby>`;
               lastActiveTargetChar = activeRuby || lastActiveTargetChar;
             } else {
               const hiddenChar = token.char.substring(0, currentMatch);
-              const remChar = token.char.substring(currentMatch);
-              const activeChar = remChar.substring(0, 1);
-              const futureChar = remChar.substring(1);
+              const remainingChar = token.char.substring(currentMatch);
+              const activeChar = remainingChar.substring(0, 1);
+              const futureChar = remainingChar.substring(1);
               pLayer = `<span style="visibility:hidden">${hiddenChar}</span><span style="opacity: 1; color: var(--text-active-prompt); font-weight:bold;">${activeChar}</span><span style="color: var(--text-upcoming); font-weight:bold;">${futureChar}</span>`;
               lastActiveTargetChar = activeChar || lastActiveTargetChar;
             }
 
+            // ★ 次に押すべきキーの予測（軽量版・逆引き）
+            let remainingTarget = targetReading.substring(matchLen);
+            let extra = remainingVal.substring(currentMatch);
+            let searchResult = findNextKeyAndValidity(extra, remainingTarget);
+            let isValid = searchResult.isValid;
+
+            if (nextExpectedKey) {
+                const prevEl = document.getElementById('kb-key-' + nextExpectedKey);
+                if (prevEl) prevEl.classList.remove('next-highlight');
+            }
+
+            // ★ 無効なキーか、リカバリー不能なミスかの判定
+            let isUndefined = false;
+            // 未確定の文字列が純粋なアルファベット記号類（ユーザーが物理的に打ったまま）の場合
+            if (extra.length > 0 && /^[a-zA-Z0-9-.,;:/@+*<>?]+$/.test(extra)) {
+                if (!validMapPrefixes.has(extra)) {
+                    isUndefined = true;
+                }
+            }
+
+            if (!isValid) {
+                if (isUndefined) {
+                    nextExpectedKey = null; // 配列定義外のキーは光らせない
+                } else {
+                    nextExpectedKey = 'capslock'; // ミス確定ならCapsを光らせてリカバリー案内
+                }
+            } else {
+                nextExpectedKey = searchResult.nextKey ? searchResult.nextKey.toLowerCase() : null;
+            }
+
+            if (nextExpectedKey) {
+                const nextEl = document.getElementById('kb-key-' + nextExpectedKey);
+                if (nextEl) nextEl.classList.add('next-highlight');
+            }
+
             let typedText = "";
+            let confirmedStr = remainingVal.substring(0, currentMatch);
+            for (let j = 0; j < confirmedStr.length; j++) {
+                let char = confirmedStr[j];
+                let targetChar = targetReading[matchLen - currentMatch + j];
+                if (targetChar && hiraToKata(char) === targetChar) char = targetChar;
+                typedText += char;
+            }
+            typedText = `<span style="color: var(--text-completed); font-weight: bold;">${escapeHTML(typedText)}</span>`;
+            
             let frameLastStatus = 'match';
-            for (let j = 0; j < remainingVal.length; j++) {
-              let char = remainingVal[j];
-              let targetChar = targetReading[confirmedHiraLen + j];
-              if (targetChar && hiraToKata(char) === targetChar) char = targetChar;
-              
-              if (isValidRoute) {
+            for (let j = 0; j < extra.length; j++) {
+              let char = extra[j];
+              if (isValid) {
                 typedText += `<span class="state">${escapeHTML(char)}</span>`;
                 frameLastStatus = 'state';
               } else {
@@ -1163,6 +1066,7 @@
             if(typedText === "") typedText = `<span style="visibility:hidden;">_</span>`;
 
             iLayer = `<div style="display: flex; align-items: center;">${typedText}<span class="custom-caret"></span></div>`;
+            remainingVal = "";
             currentMatch = 0;
         } else {
             if (token.type === 'ruby') {
@@ -1179,17 +1083,13 @@
     }
     html += '</div>';
     
-    // Game mode vs Normal mode DOM update
-    let targetEl = document.getElementById(isGameMode ? 'game-visual-wrapper' : 'visual-wrapper');
-    if(targetEl) targetEl.innerHTML = html;
+    document.getElementById('game-visual-wrapper').innerHTML = html;
   }
 
   const gameInputEl = document.getElementById('game-real-input');
 
   gameInputEl.addEventListener('keydown', function(e) {
     if(gameTimer <= 0) return;
-    handleShiftTapDown(e);
-    if (checkModeSwitchKeys(e)) return;
 
     if (e.code === 'CapsLock' || e.key === 'Alphanumeric' || e.code === 'Lang2' || e.key === 'Backspace') {
       e.preventDefault();
@@ -1203,45 +1103,31 @@
       e.preventDefault();
       gameInputValue += e.key;
       handleGameInputUpdate();
-      recordKeystroke(e.key);
     }
-  });
-
-  gameInputEl.addEventListener('keyup', function(e) {
-    if(gameTimer <= 0) return;
-    checkModeSwitchKeys(e);
-    handleShiftTapUp(e);
   });
 
   function handleGameInputUpdate() {
-    let val = gameInputValue;
-    if (!isEnglishMode) {
-      val = applyCustomIME(val);
-    }
+    let val = applyCustomIME(gameInputValue);
     gameInputValue = val;
 
-    updateGameVisuals(val, currentWordObj);
+    updateGameVisuals(val);
 
     let targetReading = currentWordObj.tokens.map(t => t.target).join('');
-    let confirmedRawLen = 0;
-    let confirmedHiraLen = 0;
-    let step = 1;
-    while (step <= gameInputValue.length) {
-        let testRaw = gameInputValue.substring(confirmedRawLen, step);
-        let evalStr = applyCustomIME(testRaw);
-        if (!(/[ァ-ヶ]/.test(evalStr) && evalStr !== 'ー' && evalStr !== 'ヴ')) {
-            let normEval = normalizeForMatch(evalStr);
-            let remTarget = targetReading.substring(confirmedHiraLen);
-            if (normEval.length > 0 && remTarget.startsWith(normEval)) {
-                confirmedRawLen = step;
-                confirmedHiraLen += normEval.length;
-                continue;
-            }
-        }
-        step++;
+    let adjustedVal = "";
+    for (let i = 0; i < val.length; i++) {
+        let typedChar = val[i];
+        let targetChar = targetReading[i];
+        if (targetChar && hiraToKata(typedChar) === targetChar) typedChar = targetChar;
+        adjustedVal += typedChar;
     }
 
-    if (confirmedHiraLen === targetReading.length && confirmedRawLen === gameInputValue.length) {
+    let matchLen = 0;
+    for (let i = 0; i < adjustedVal.length; i++) {
+        if (adjustedVal[i] === targetReading[i]) matchLen++;
+        else break;
+    }
+
+    if (matchLen === targetReading.length && val.length === targetReading.length) {
         totalChars += currentWordObj.targetLine.length;
         const { displayChars, moraCount } = computeLineMetrics(currentWordObj);
         statsDisplayCharsTotal += displayChars;
@@ -1317,45 +1203,176 @@
         if (!inputDiv.querySelector('.real-input')) {
           inputDiv.innerHTML = `
             <div tabindex="0" class="real-input"></div>
-            <div class="visual-wrapper" id="visual-wrapper" style="position: relative; z-index:1;"></div>
+            <div class="visual-wrapper" style="position: relative; z-index:1;"></div>
           `;
           const inputField = inputDiv.querySelector('.real-input');
+          const visualDiv = inputDiv.querySelector('.visual-wrapper');
           
           normalInputValue = ""; 
           inputField.focus();
 
+          const updateVisuals = (val) => {
+            let targetReading = parsed.tokens.map(t => t.target).join('');
+
+            let adjustedVal = "";
+            for (let i = 0; i < val.length; i++) {
+                let typedChar = val[i];
+                let targetChar = targetReading[i];
+                if (targetChar && hiraToKata(typedChar) === targetChar) {
+                    typedChar = targetChar;
+                }
+                adjustedVal += typedChar;
+            }
+
+            let matchLen = 0;
+            for (let i = 0; i < adjustedVal.length; i++) {
+                if (adjustedVal[i] === targetReading[i]) matchLen++;
+                else break;
+            }
+
+            let remainingVal = val;
+            let currentMatch = matchLen;
+            let caretDrawn = false;
+
+            let html = '<div class="visual-tokens-container">';
+
+            for (const token of parsed.tokens) {
+              html += '<div class="token-wrapper">';
+              
+              let pLayer = '';
+              let iLayer = '';
+
+              if (currentMatch >= token.target.length) {
+                pLayer = `<ruby style="visibility:hidden; user-select:none;">${token.type === 'ruby' ? token.base : token.char}<rt>_</rt></ruby>`;
+                iLayer = `<span style="color: var(--text-completed); font-weight: bold;">${token.type === 'ruby' ? token.base : token.char}</span>`;
+                currentMatch -= token.target.length;
+                remainingVal = remainingVal.substring(token.target.length);
+              } else if (!caretDrawn) {
+                caretDrawn = true;
+                
+                if (token.type === 'ruby') {
+                  const hiddenRuby = token.ruby.substring(0, currentMatch);
+                  const remainingRuby = token.ruby.substring(currentMatch);
+                  const activeRuby = remainingRuby.substring(0, 1);
+                  const futureRuby = remainingRuby.substring(1);
+                  pLayer = `<ruby><span style="opacity: 0.8; color: var(--text-completed); font-weight:bold;">${token.base}</span><rt><span style="visibility:hidden">${hiddenRuby}</span><span style="color: var(--text-active-prompt); font-weight:bold;">${activeRuby}</span><span style="color: var(--text-upcoming);">${futureRuby}</span></rt></ruby>`;
+                  lastActiveTargetChar = activeRuby || lastActiveTargetChar;
+                } else {
+                  const hiddenChar = token.char.substring(0, currentMatch);
+                  const remainingChar = token.char.substring(currentMatch);
+                  const activeChar = remainingChar.substring(0, 1);
+                  const futureChar = remainingChar.substring(1);
+                  pLayer = `<ruby><span style="visibility:hidden">${hiddenChar}</span><span style="opacity: 1; color: var(--text-active-prompt); font-weight:bold;">${activeChar}</span><span style="color: var(--text-upcoming); font-weight:bold;">${futureChar}</span><rt style="visibility:hidden">_</rt></ruby>`;
+                  lastActiveTargetChar = activeChar || lastActiveTargetChar;
+                }
+
+                // ★ 次に押すべきキーの予測（軽量版・逆引き）
+                let remainingTarget = targetReading.substring(matchLen);
+                let extra = remainingVal.substring(currentMatch);
+                let searchResult = findNextKeyAndValidity(extra, remainingTarget);
+                let isValid = searchResult.isValid;
+
+                if (nextExpectedKey) {
+                    const prevEl = document.getElementById('kb-key-' + nextExpectedKey);
+                    if (prevEl) prevEl.classList.remove('next-highlight');
+                }
+
+                // ★ 無効なキーか、リカバリー不能なミスかの判定
+                let isUndefined = false;
+                if (extra.length > 0 && /^[a-zA-Z0-9-.,;:/@+*<>?]+$/.test(extra)) {
+                    if (!validMapPrefixes.has(extra)) {
+                        isUndefined = true;
+                    }
+                }
+
+                if (!isValid) {
+                    if (isUndefined) {
+                        nextExpectedKey = null; 
+                    } else {
+                        nextExpectedKey = 'capslock'; 
+                    }
+                } else {
+                    nextExpectedKey = searchResult.nextKey ? searchResult.nextKey.toLowerCase() : null;
+                }
+
+                if (nextExpectedKey) {
+                    const nextEl = document.getElementById('kb-key-' + nextExpectedKey);
+                    if (nextEl) nextEl.classList.add('next-highlight');
+                }
+
+                let typedText = "";
+                let confirmedStr = remainingVal.substring(0, currentMatch);
+                for (let j = 0; j < confirmedStr.length; j++) {
+                    let char = confirmedStr[j];
+                    let targetChar = targetReading[matchLen - currentMatch + j];
+                    if (targetChar && hiraToKata(char) === targetChar) char = targetChar;
+                    typedText += char;
+                }
+                typedText = `<span style="color: var(--text-completed); font-weight: bold;">${escapeHTML(typedText)}</span>`;
+                
+                let frameLastStatus = 'match';
+                for (let j = 0; j < extra.length; j++) {
+                  let char = extra[j];
+                  if (isValid) {
+                    typedText += `<span class="state">${escapeHTML(char)}</span>`;
+                    frameLastStatus = 'state';
+                  } else {
+                    typedText += `<span class="mistake">${escapeHTML(char)}</span>`;
+                    frameLastStatus = 'mistake';
+                  }
+                }
+                lastCharStatus = frameLastStatus;
+                
+                if(typedText === "") typedText = `<span style="visibility:hidden;">_</span>`;
+
+                iLayer = `<div style="display: flex; align-items: center;">${typedText}<span class="custom-caret"></span></div>`;
+                remainingVal = "";
+                currentMatch = 0;
+              } else {
+                if (token.type === 'ruby') {
+                  pLayer = `<ruby>${token.base}<rt>${token.ruby}</rt></ruby>`;
+                } else {
+                  pLayer = `<ruby>${token.char}<rt style="visibility:hidden">_</rt></ruby>`;
+                }
+                iLayer = `<span style="visibility:hidden;">_</span>`;
+              }
+
+              html += `<div class="prompt-layer">${pLayer}</div>`;
+              html += `<div class="input-layer">${iLayer}</div>`;
+              html += '</div>'; 
+            }
+
+            html += '</div>'; 
+            visualDiv.innerHTML = html;
+          };
+
           const checkInput = () => {
             if (!startTime) startTimer();
             
-            let val = normalInputValue;
-            if (!isEnglishMode) {
-              val = applyCustomIME(val);
-            }
+            let val = applyCustomIME(normalInputValue);
             normalInputValue = val;
 
-            updateGameVisuals(val, parsed); 
+            let adjustedVal = "";
+            for (let i = 0; i < val.length; i++) {
+              let typedChar = val[i];
+              let targetChar = parsed.targetLine[i]; 
+              if (targetChar && hiraToKata(typedChar) === targetChar) {
+                typedChar = targetChar;
+              }
+              adjustedVal += typedChar;
+            }
+
+            updateVisuals(adjustedVal, val); 
 
             let targetReading = parsed.tokens.map(t => t.target).join('');
 
-            let confirmedRawLen = 0;
-            let confirmedHiraLen = 0;
-            let step = 1;
-            while (step <= normalInputValue.length) {
-                let testRaw = normalInputValue.substring(confirmedRawLen, step);
-                let evalStr = applyCustomIME(testRaw);
-                if (!(/[ァ-ヶ]/.test(evalStr) && evalStr !== 'ー' && evalStr !== 'ヴ')) {
-                    let normEval = normalizeForMatch(evalStr);
-                    let remTarget = targetReading.substring(confirmedHiraLen);
-                    if (normEval.length > 0 && remTarget.startsWith(normEval)) {
-                        confirmedRawLen = step;
-                        confirmedHiraLen += normEval.length;
-                        continue;
-                    }
-                }
-                step++;
+            let matchLen = 0;
+            for (let i = 0; i < adjustedVal.length; i++) {
+                if (adjustedVal[i] === targetReading[i]) matchLen++;
+                else break;
             }
 
-            if (confirmedHiraLen === targetReading.length && confirmedRawLen === normalInputValue.length) {
+            if (matchLen === targetReading.length && val.length === targetReading.length) {
               totalChars += parsed.targetLine.length;
               const { displayChars, moraCount } = computeLineMetrics(parsed);
               statsDisplayCharsTotal += displayChars;
@@ -1372,9 +1389,6 @@
           };
 
           inputField.addEventListener('keydown', (e) => {
-            handleShiftTapDown(e);
-            if (checkModeSwitchKeys(e)) return;
-
             if (e.code === 'CapsLock' || e.key === 'Alphanumeric' || e.code === 'Lang2' || e.key === 'Backspace') {
               e.preventDefault();
               normalInputValue = normalInputValue.slice(0, -1);
@@ -1391,12 +1405,7 @@
             }
           });
 
-          inputField.addEventListener('keyup', (e) => {
-            checkModeSwitchKeys(e);
-            handleShiftTapUp(e);
-          });
-
-          updateGameVisuals(normalInputValue, parsed); 
+          updateVisuals(normalInputValue); 
 
         } else {
           inputDiv.querySelector('.real-input').focus();
