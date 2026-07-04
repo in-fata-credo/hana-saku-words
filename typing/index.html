@@ -328,6 +328,19 @@
     min-width: 12px;
     text-align: center;
   }
+  .kb-key .kb-expected-badge {
+    position: absolute;
+    bottom: -6px;
+    left: -6px;
+    background: #3b82f6;
+    color: #fff;
+    font-size: 9px;
+    line-height: 1;
+    padding: 2px 3px;
+    border-radius: 8px;
+    min-width: 12px;
+    text-align: center;
+  }
 
   @media (max-width: 1300px) {
     #stats-sidebar, #mistake-sidebar { display: none; }
@@ -410,7 +423,7 @@
 
 <!-- ===================== 下部：キー別ヒートマップ ===================== -->
 <div id="keyboard-heatmap-wrapper">
-  <div id="keyboard-heatmap-title">キー別ヒートマップ（色 = 速度 / 赤バッジ = ミス回数）</div>
+  <div id="keyboard-heatmap-title">キー別ヒートマップ（色 = 速度 / 右上赤バッジ = 誤って押した回数 / 左下青バッジ = 本来押すべきだった回数）</div>
   <div id="keyboard-heatmap"></div>
 </div>
 
@@ -457,9 +470,11 @@
 
   let lastCharStatus = null;      // 直近の描画で見た末尾文字の状態: 'match' | 'state' | 'mistake'
   let lastActiveTargetChar = null;// 直近描画時に入力中だった対象「かな」1文字
+  let lastExpectedKey = null;     // ミス時に「本来押すべきだった物理キー」
 
-  let keyStats = {};   // { [物理キー]: {timeSum, timeCount, missCount, pressCount} }
-  let kanaStats = {};  // { [かな]: {timeSum, timeCount, missCount} }
+  let keyStats = {};      // { [物理キー]: {timeSum, timeCount, missCount, pressCount} } ※実際に押されて間違いだったキー
+  let expectedKeyStats = {}; // { [物理キー]: missCount } ※本来ここで押すべきだったのに押されなかった回数
+  let kanaStats = {};     // { [かな]: {timeSum, timeCount, missCount} }
 
   let lastKeyTimestamp = null;
   let skipNextTimingGap = true; // 行/単語の境目や開始直後は「思考時間」として計測を除外
@@ -472,7 +487,9 @@
     statsMoraTotal = 0;
     lastCharStatus = null;
     lastActiveTargetChar = null;
+    lastExpectedKey = null;
     keyStats = {};
+    expectedKeyStats = {};
     kanaStats = {};
     lastKeyTimestamp = null;
     skipNextTimingGap = true;
@@ -490,6 +507,38 @@
       count++;
     }
     return count;
+  }
+
+  // customKeyMapを逆引きし、対象の「かな」に到達できる物理キー列（複数候補あり）を返す
+  function getKeySequencesForKana(targetChar) {
+    if (!targetChar) return [];
+    const seqs = [];
+    for (const key in customKeyMap) {
+      if (customKeyMap[key] === targetChar) seqs.push(key);
+    }
+    return seqs;
+  }
+
+  // 現在までに押した（未確定の）文字列が、対象の「かな」に到達する正しいキー列の
+  // プレフィックスとして成立しているかどうかを判定する
+  function isValidPendingPrefix(prefix, targetChar) {
+    if (!prefix) return true;
+    const seqs = getKeySequencesForKana(targetChar);
+    if (seqs.length === 0) return false;
+    const lowerPrefix = prefix.toLowerCase();
+    return seqs.some(seq => seq.length >= prefix.length && seq.toLowerCase().startsWith(lowerPrefix));
+  }
+
+  // ミスと判定された最後の1キーについて、「本来押すべきだったキー」を1文字返す
+  function getExpectedKey(prefixBeforeMistake, targetChar) {
+    const seqs = getKeySequencesForKana(targetChar);
+    const lowerPrefix = prefixBeforeMistake.toLowerCase();
+    for (const seq of seqs) {
+      if (seq.length > prefixBeforeMistake.length && seq.toLowerCase().startsWith(lowerPrefix)) {
+        return seq.charAt(prefixBeforeMistake.length);
+      }
+    }
+    return null;
   }
 
   // 1行/1単語ぶんの「画面表記文字数」と「モーラ数」を計算
@@ -528,6 +577,10 @@
       if (targetKana) {
         if (!kanaStats[targetKana]) kanaStats[targetKana] = { timeSum: 0, timeCount: 0, missCount: 0 };
         kanaStats[targetKana].missCount++;
+      }
+      if (lastExpectedKey) {
+        const expKey = lastExpectedKey.toLowerCase();
+        expectedKeyStats[expKey] = (expectedKeyStats[expKey] || 0) + 1;
       }
     } else {
       statsKpm1++;
@@ -650,14 +703,17 @@
       html += '<div class="kb-row">';
       row.forEach(key => {
         const s = keyStats[key];
+        const expectedMiss = expectedKeyStats[key] || 0;
         let bg = '#eee';
         let missBadge = '';
+        let expectedBadge = '';
         if (s) {
           const avgTime = s.timeCount > 0 ? s.timeSum / s.timeCount : null;
           bg = timeToColor(avgTime, minT, maxT);
-          if (s.missCount > 0) missBadge = `<span class="kb-miss-badge">${s.missCount}</span>`;
+          if (s.missCount > 0) missBadge = `<span class="kb-miss-badge" title="このキーを押して間違えた回数">${s.missCount}</span>`;
         }
-        html += `<div class="kb-key" style="background-color:${bg};">${escapeHTML(key)}${missBadge}</div>`;
+        if (expectedMiss > 0) expectedBadge = `<span class="kb-expected-badge" title="本来このキーを押すべきだったのに押されなかった回数">${expectedMiss}</span>`;
+        html += `<div class="kb-key" style="background-color:${bg};">${escapeHTML(key)}${missBadge}${expectedBadge}</div>`;
       });
       html += '</div>';
     });
@@ -1075,21 +1131,30 @@
             
             let extra = remainingVal.substring(currentMatch);
             let frameLastStatus = 'match';
+            let frameExpectedKey = null;
+            const nextTargetKana = currentWordObj.targetLine[matchLen];
             for (let j = 0; j < extra.length; j++) {
               let char = extra[j];
               let targetChar = currentWordObj.targetLine[matchLen + j];
               if (targetChar && hiraToKata(char) === targetChar) char = targetChar;
               if (targetChar && char.toLowerCase() === targetChar.toLowerCase()) char = targetChar;
-              
-              if (/[ァ-ヶA-Za-z0-9ー]/.test(char) || isBridgeChar(char, targetChar)) {
+
+              const rawPrefix = extra.substring(0, j + 1);
+              const isSpecialPassthrough = /[ァ-ヶ0-9ー]/.test(extra[j]);
+              const validPath = isSpecialPassthrough || isValidPendingPrefix(rawPrefix, nextTargetKana) || isBridgeChar(extra[j], targetChar);
+
+              if (validPath) {
                 typedText += `<span class="state">${escapeHTML(char)}</span>`;
                 frameLastStatus = 'state';
+                frameExpectedKey = null;
               } else {
                 typedText += `<span class="mistake">${escapeHTML(char)}</span>`;
                 frameLastStatus = 'mistake';
+                frameExpectedKey = getExpectedKey(extra.substring(0, j), nextTargetKana);
               }
             }
             lastCharStatus = frameLastStatus;
+            lastExpectedKey = frameExpectedKey;
             
             if(typedText === "") typedText = `<span style="visibility:hidden;">_</span>`;
 
@@ -1316,21 +1381,30 @@
                 
                 let extra = remainingVal.substring(currentMatch);
                 let frameLastStatus = 'match';
+                let frameExpectedKey = null;
+                const nextTargetKana = parsed.targetLine[matchLen];
                 for (let j = 0; j < extra.length; j++) {
                   let char = extra[j];
                   let targetChar = parsed.targetLine[matchLen + j];
                   if (targetChar && hiraToKata(char) === targetChar) char = targetChar;
                   if (targetChar && char.toLowerCase() === targetChar.toLowerCase()) char = targetChar;
-                  
-                  if (/[ァ-ヶA-Za-z0-9ー]/.test(char) || isBridgeChar(char, targetChar)) {
+
+                  const rawPrefix = extra.substring(0, j + 1);
+                  const isSpecialPassthrough = /[ァ-ヶ0-9ー]/.test(extra[j]);
+                  const validPath = isSpecialPassthrough || isValidPendingPrefix(rawPrefix, nextTargetKana) || isBridgeChar(extra[j], targetChar);
+
+                  if (validPath) {
                     typedText += `<span class="state">${escapeHTML(char)}</span>`;
                     frameLastStatus = 'state';
+                    frameExpectedKey = null;
                   } else {
                     typedText += `<span class="mistake">${escapeHTML(char)}</span>`;
                     frameLastStatus = 'mistake';
+                    frameExpectedKey = getExpectedKey(extra.substring(0, j), nextTargetKana);
                   }
                 }
                 lastCharStatus = frameLastStatus;
+                lastExpectedKey = frameExpectedKey;
                 
                 if(typedText === "") typedText = `<span style="visibility:hidden;">_</span>`;
 
