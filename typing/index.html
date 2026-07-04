@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>花咲く言葉 (HSW配列) - タイピングプラクティス v28.04</title>
+<title>花咲く言葉 (HSW配列) - タイピングプラクティス v28.05</title>
 <style>
   :root {
     --bg-color: #fcfbf9; 
@@ -157,13 +157,10 @@
   @keyframes blink { 50% { opacity: 0; } }
 
   .status-bar {
-    display: flex; justify-content: space-between; padding-top: 25px; padding-bottom: 25px; font-size: 20px; color: var(--status-text); border-top: 1px solid var(--border-line); background-color: rgba(252, 251, 249, 0.95); font-family: sans-serif;
+    display: flex; justify-content: space-between; padding-top: 25px; padding-bottom: 25px; font-size: 20px; color: var(--status-text); border-top: 1px solid var(--border-line); position: sticky; bottom: 0; background-color: rgba(252, 251, 249, 0.95); z-index: 10; font-family: sans-serif;
   }
   .val { color: var(--text-completed); font-weight: bold; }
 
-  /* ============================================================
-     右上パラメータ / 右下データ / 下部キーボードヒートマップ
-     ============================================================ */
   body { padding-bottom: 200px; }
 
   #stats-sidebar {
@@ -242,7 +239,6 @@
   }
   .mistake-tag.miss { background: rgba(225,29,72,0.12); color: #e11d48; }
   .mistake-tag.slow { background: rgba(176,156,133,0.15); color: var(--status-text); }
-  .mistake-count { font-size: 11px; color: var(--status-text); }
 
   #keyboard-heatmap-wrapper {
     position: fixed;
@@ -287,21 +283,8 @@
     color: #333;
     background: #eee;
     border: 1px solid rgba(0,0,0,0.05);
-    transition: background-color 0.3s ease, color 0.1s, transform 0.1s;
+    transition: background-color 0.3s ease;
   }
-  
-  /* 次に押すべきキーの強調スタイル（黒セル＋赤文字＋文字大） */
-  .kb-key.next-highlight {
-    background-color: #000000 !important;
-    color: #ff3333 !important;
-    font-size: 20px !important;
-    font-weight: 900 !important;
-    transform: scale(1.15);
-    z-index: 10;
-    border: 2px solid #ff3333 !important;
-    box-shadow: 0 0 8px rgba(255, 51, 51, 0.4);
-  }
-
   .kb-key .kb-miss-badge {
     position: absolute;
     top: -6px;
@@ -316,6 +299,18 @@
     text-align: center;
   }
 
+  /* ★ 次に押すべきキーの強調スタイル（黒セル＋赤文字＋文字大） */
+  .kb-key.next-highlight {
+    background-color: #000000 !important;
+    color: #ff3333 !important;
+    font-size: 20px !important;
+    font-weight: 900 !important;
+    transform: scale(1.15);
+    z-index: 10;
+    border: 2px solid #ff3333 !important;
+    box-shadow: 0 0 8px rgba(255, 51, 51, 0.4);
+  }
+
   @media (max-width: 1300px) {
     #stats-sidebar, #mistake-sidebar { display: none; }
   }
@@ -324,7 +319,7 @@
 <body>
 
 <div class="header">
-  <h2>✿ 花咲く言葉 - タイピングの庭 v28.04</h2>
+  <h2>✿ 花咲く言葉 - タイピングの庭 v28.05</h2>
   <button class="settings-btn" id="toggle-settings" title="設定・コース選択">⚙️</button>
 </div>
 
@@ -422,7 +417,6 @@
   let gameWordsPool = [];
   let currentWordObj = null;
 
-  let isEnglishMode = false;
   let normalInputValue = "";
   let gameInputValue = "";
 
@@ -440,101 +434,76 @@
 
   let lastKeyTimestamp = null;
   let skipNextTimingGap = true;
-  
   let nextExpectedKey = null;
 
   // ============================================================
-  // ★ ルート探索・次キー推測・NG判定用の完全改修ロジック
+  // ★ NEW: 超軽量・完全正確なルート予測アルゴリズム
   // ============================================================
-  let searchCache = {};
-  let validMapPrefixes = new Set();
+  let recipeCache = {};
   let validKeyChars = [];
 
-  // アプリ起動時にcustomKeyMapから検索用データを構築
   function initSearchCaches() {
-      validMapPrefixes.clear();
       let physicalKeys = new Set();
       for (let k in customKeyMap) {
           if (k.length === 1 && !/[ァ-ヶぁ-ん]/.test(k)) {
               physicalKeys.add(k.toLowerCase());
           }
-          for (let i = 1; i <= k.length; i++) {
-              validMapPrefixes.add(k.substring(0, i));
-          }
       }
       "abcdefghijklmnopqrstuvwxyz-.,;:/@+*<>?1234567890".split('').forEach(c => physicalKeys.add(c));
       validKeyChars = Array.from(physicalKeys);
-      searchCache = {};
+      recipeCache = {};
   }
 
-  // BFSによる完全なパスシミュレーション（指定された文字列から、目標に到達できるかを探索）
-  function findNextKeyAndValidity(buffer, remainingTargetReading) {
-      if (!remainingTargetReading) return { isValid: true, nextKey: null };
+  // 指定した「かな」を打つための正しい状態遷移辞書（レシピ）を生成・キャッシュする
+  function getRecipe(targetStr) {
+      if (!targetStr) return {};
+      if (recipeCache[targetStr]) return recipeCache[targetStr];
 
-      // 探索の深さを抑えるため、目標プレフィックスを抽出
-      let targetPrefix = remainingTargetReading.substring(0, 4);
-      let cacheKey = buffer + "|" + targetPrefix;
-      if (searchCache[cacheKey]) return searchCache[cacheKey];
-
-      let queue = [ { text: buffer, path: [] } ];
-      let visited = new Set();
-      visited.add(buffer);
-      
-      let isValid = false;
-      let nextKey = null;
+      let validStates = {};
+      let queue = [ { text: "", path: [] } ];
+      let visited = new Set([""]);
+      let foundPath = null;
 
       while(queue.length > 0) {
           let curr = queue.shift();
           
-          // シミュレーション内の文字もカタカナ対応に自動変換（画面表示と同じロジック）
-          let adjustedCurr = "";
-          for (let i = 0; i < curr.text.length; i++) {
-              let typedChar = curr.text[i];
-              let expectedChar = targetPrefix[i];
-              if (expectedChar && hiraToKata(typedChar) === expectedChar) {
-                  typedChar = expectedChar;
-              }
-              adjustedCurr += typedChar;
+          if (curr.text === targetStr) {
+              foundPath = curr.path;
+              break;
           }
-
-          let isPrefix = (adjustedCurr.length > 0 && targetPrefix.startsWith(adjustedCurr));
-          
-          if (isPrefix) {
-              if (adjustedCurr !== buffer) {
-                  isValid = true;
-                  nextKey = curr.path[0];
-                  break;
-              } else if (curr.path.length === 0) {
-                  isValid = true;
-              }
-          }
-          
-          if (curr.path.length >= 5) continue; // 安全装置
-
-          if (!isPrefix) {
-              let hasValidSuffix = false;
-              for (let len = 1; len <= Math.min(curr.text.length, 6); len++) {
-                  let suffix = curr.text.slice(-len);
-                  if (validMapPrefixes.has(suffix)) {
-                      hasValidSuffix = true;
-                      break;
-                  }
-              }
-              if (!hasValidSuffix && curr.text !== "") continue;
-          }
+          if (curr.path.length >= 5) continue; // HSWの1文字/拗音入力は最大でも4手程度
 
           for (let c of validKeyChars) {
               let nextText = applyCustomIME(curr.text + c);
-              if (!visited.has(nextText)) {
+              // パスが爆発しないように、結果がターゲット長+1以内に収まるものだけ探索
+              if (nextText.length <= targetStr.length + 1 && !visited.has(nextText)) {
                   visited.add(nextText);
                   queue.push({ text: nextText, path: [...curr.path, c] });
               }
           }
       }
-      
-      let result = { isValid, nextKey };
-      searchCache[cacheKey] = result;
-      return result;
+
+      if (foundPath) {
+          let state = "";
+          for (let i = 0; i < foundPath.length; i++) {
+              validStates[state] = foundPath[i];
+              state = applyCustomIME(state + foundPath[i]);
+          }
+      }
+      recipeCache[targetStr] = validStates;
+      return validStates;
+  }
+
+  // ターゲット文字列から次に打つべき1つの「かな（または拗音）」を抽出
+  function getFirstKana(str) {
+      if (!str) return "";
+      if (str.length >= 2) {
+          let two = str.substring(0, 2);
+          if (/[ぁ-んァ-ヶ][ゃゅょぁぃぅぇぉャュョァィゥェォ]/.test(two)) {
+              return two;
+          }
+      }
+      return str.substring(0, 1);
   }
 
   function resetSessionStats() {
@@ -733,52 +702,6 @@
     container.innerHTML = html;
   }
 
-  function setInputMode(isEnglish) {
-      if (isEnglishMode === isEnglish) return;
-      isEnglishMode = isEnglish;
-  }
-
-  window.toggleInputMode = function() {
-      setInputMode(!isEnglishMode);
-      const activeInput = document.querySelector('.real-input:focus') || document.querySelector('.real-input') || document.getElementById('game-real-input');
-      if (activeInput) activeInput.focus();
-  };
-
-  let shiftRightDownTime = 0;
-  let shiftRightModifierUsed = false;
-
-  function handleShiftTapDown(e) {
-      if (e.code === 'ShiftRight') {
-          shiftRightDownTime = performance.now();
-          shiftRightModifierUsed = false;
-      } else if (e.shiftKey) {
-          shiftRightModifierUsed = true;
-      }
-  }
-
-  function handleShiftTapUp(e) {
-      if (e.code === 'ShiftRight') {
-          const heldTime = performance.now() - shiftRightDownTime;
-          if (!shiftRightModifierUsed && heldTime < 400) {
-              setInputMode(true);
-          }
-      }
-  }
-
-  function checkModeSwitchKeys(e) {
-      if (e.code === 'NonConvert' || e.key === 'NonConvert' || e.keyCode === 29) {
-          e.preventDefault();
-          setInputMode(true);
-          return true;
-      }
-      if (e.code === 'Convert' || e.key === 'Convert' || e.keyCode === 28) {
-          e.preventDefault();
-          setInputMode(false);
-          return true;
-      }
-      return false;
-  }
-
   async function initApp() {
     try {
       const pathCandidates = [
@@ -820,7 +743,7 @@
         }
       });
       
-      initSearchCaches();
+      initSearchCaches(); // ★ 起動時にキャッシュ準備
 
       courseData = await courseRes.json();
       buildDropdown();
@@ -1086,6 +1009,25 @@
               lastActiveTargetChar = activeChar || lastActiveTargetChar;
             }
 
+            // ★ NEW: キャッシュを利用した超軽量レシピチェック
+            let remainingTarget = token.target.substring(currentMatch);
+            let nextKana = getFirstKana(remainingTarget);
+            let recipe = getRecipe(nextKana);
+
+            let extra = remainingVal.substring(currentMatch);
+            let isValid = (extra in recipe) || (extra === "");
+            
+            if (nextExpectedKey) {
+                const prevEl = document.getElementById('kb-key-' + nextExpectedKey);
+                if (prevEl) prevEl.classList.remove('next-highlight');
+            }
+            let nextKey = recipe[extra];
+            nextExpectedKey = nextKey ? nextKey.toLowerCase() : null;
+            if (nextExpectedKey) {
+                const nextEl = document.getElementById('kb-key-' + nextExpectedKey);
+                if (nextEl) nextEl.classList.add('next-highlight');
+            }
+
             let typedText = "";
             let confirmedStr = remainingVal.substring(0, currentMatch);
             for (let j = 0; j < confirmedStr.length; j++) {
@@ -1096,23 +1038,7 @@
             }
             typedText = `<span style="color: var(--text-completed); font-weight: bold;">${escapeHTML(typedText)}</span>`;
             
-            let extra = remainingVal.substring(currentMatch);
             let frameLastStatus = 'match';
-            
-            let remainingTarget = targetReading.substring(matchLen);
-            let searchResult = findNextKeyAndValidity(extra, remainingTarget);
-            let isValid = searchResult.isValid;
-
-            if (nextExpectedKey) {
-                const prevEl = document.getElementById('kb-key-' + nextExpectedKey);
-                if (prevEl) prevEl.classList.remove('next-highlight');
-            }
-            nextExpectedKey = searchResult.nextKey ? searchResult.nextKey.toLowerCase() : null;
-            if (nextExpectedKey) {
-                const nextEl = document.getElementById('kb-key-' + nextExpectedKey);
-                if (nextEl) nextEl.classList.add('next-highlight');
-            }
-
             for (let j = 0; j < extra.length; j++) {
               let char = extra[j];
               if (isValid) {
@@ -1152,8 +1078,6 @@
 
   gameInputEl.addEventListener('keydown', function(e) {
     if(gameTimer <= 0) return;
-    handleShiftTapDown(e);
-    if (checkModeSwitchKeys(e)) return;
 
     if (e.code === 'CapsLock' || e.key === 'Alphanumeric' || e.code === 'Lang2' || e.key === 'Backspace') {
       e.preventDefault();
@@ -1171,17 +1095,8 @@
     }
   });
 
-  gameInputEl.addEventListener('keyup', function(e) {
-    if(gameTimer <= 0) return;
-    checkModeSwitchKeys(e);
-    handleShiftTapUp(e);
-  });
-
   function handleGameInputUpdate() {
-    let val = gameInputValue;
-    if (!isEnglishMode) {
-      val = applyCustomIME(val);
-    }
+    let val = applyCustomIME(gameInputValue);
     gameInputValue = val;
 
     updateGameVisuals(val);
@@ -1340,6 +1255,25 @@
                   lastActiveTargetChar = activeChar || lastActiveTargetChar;
                 }
 
+                // ★ NEW: キャッシュを利用した超軽量レシピチェック
+                let remainingTarget = token.target.substring(currentMatch);
+                let nextKana = getFirstKana(remainingTarget);
+                let recipe = getRecipe(nextKana);
+
+                let extra = remainingVal.substring(currentMatch);
+                let isValid = (extra in recipe) || (extra === "");
+
+                if (nextExpectedKey) {
+                    const prevEl = document.getElementById('kb-key-' + nextExpectedKey);
+                    if (prevEl) prevEl.classList.remove('next-highlight');
+                }
+                let nextKey = recipe[extra];
+                nextExpectedKey = nextKey ? nextKey.toLowerCase() : null;
+                if (nextExpectedKey) {
+                    const nextEl = document.getElementById('kb-key-' + nextExpectedKey);
+                    if (nextEl) nextEl.classList.add('next-highlight');
+                }
+
                 let typedText = "";
                 let confirmedStr = remainingVal.substring(0, currentMatch);
                 for (let j = 0; j < confirmedStr.length; j++) {
@@ -1350,23 +1284,7 @@
                 }
                 typedText = `<span style="color: var(--text-completed); font-weight: bold;">${escapeHTML(typedText)}</span>`;
                 
-                let extra = remainingVal.substring(currentMatch);
                 let frameLastStatus = 'match';
-                
-                let remainingTarget = targetReading.substring(matchLen);
-                let searchResult = findNextKeyAndValidity(extra, remainingTarget);
-                let isValid = searchResult.isValid;
-
-                if (nextExpectedKey) {
-                    const prevEl = document.getElementById('kb-key-' + nextExpectedKey);
-                    if (prevEl) prevEl.classList.remove('next-highlight');
-                }
-                nextExpectedKey = searchResult.nextKey ? searchResult.nextKey.toLowerCase() : null;
-                if (nextExpectedKey) {
-                    const nextEl = document.getElementById('kb-key-' + nextExpectedKey);
-                    if (nextEl) nextEl.classList.add('next-highlight');
-                }
-
                 for (let j = 0; j < extra.length; j++) {
                   let char = extra[j];
                   if (isValid) {
@@ -1405,10 +1323,7 @@
           const checkInput = () => {
             if (!startTime) startTimer();
             
-            let val = normalInputValue;
-            if (!isEnglishMode) {
-              val = applyCustomIME(val);
-            }
+            let val = applyCustomIME(normalInputValue);
             normalInputValue = val;
 
             updateVisuals(val); 
@@ -1416,10 +1331,12 @@
             let targetReading = parsed.tokens.map(t => t.target).join('');
             let adjustedVal = "";
             for (let i = 0; i < val.length; i++) {
-                let typedChar = val[i];
-                let targetChar = targetReading[i];
-                if (targetChar && hiraToKata(typedChar) === targetChar) typedChar = targetChar;
-                adjustedVal += typedChar;
+              let typedChar = val[i];
+              let targetChar = targetReading[i]; 
+              if (targetChar && hiraToKata(typedChar) === targetChar) {
+                typedChar = targetChar;
+              }
+              adjustedVal += typedChar;
             }
 
             let matchLen = 0;
@@ -1445,9 +1362,6 @@
           };
 
           inputField.addEventListener('keydown', (e) => {
-            handleShiftTapDown(e);
-            if (checkModeSwitchKeys(e)) return;
-
             if (e.code === 'CapsLock' || e.key === 'Alphanumeric' || e.code === 'Lang2' || e.key === 'Backspace') {
               e.preventDefault();
               normalInputValue = normalInputValue.slice(0, -1);
@@ -1462,11 +1376,6 @@
               checkInput();
               recordKeystroke(e.key);
             }
-          });
-
-          inputField.addEventListener('keyup', (e) => {
-            checkModeSwitchKeys(e);
-            handleShiftTapUp(e);
           });
 
           updateVisuals(normalInputValue); 
