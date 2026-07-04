@@ -328,8 +328,8 @@
   async function initApp() {
     try {
       const [romanRes, courseRes] = await Promise.all([
-        fetch('../data/romantable.txt'),
-        fetch('../data/course.json')
+        fetch('data/romantable.txt'),
+        fetch('data/course.json')
       ]);
 
       if (!romanRes.ok || !courseRes.ok) throw new Error("ファイルの取得に失敗しました。");
