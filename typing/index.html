@@ -48,12 +48,31 @@
   }
   .settings-btn:hover { color: var(--text-active-prompt); }
 
-  .notice-msg {
+  /* ★ 追加：モード切替インジケーターのスタイル */
+  #mode-indicator {
     text-align: center;
-    color: var(--text-upcoming);
-    font-size: 14px;
+    font-size: 16px;
+    font-weight: bold;
     margin-bottom: 40px;
+    padding: 12px 24px;
+    border-radius: 8px;
+    cursor: pointer;
+    user-select: none;
+    transition: all 0.2s;
+    width: fit-content;
+    margin-left: auto;
+    margin-right: auto;
     font-family: sans-serif;
+  }
+  .mode-hsw {
+    background-color: rgba(118, 149, 102, 0.1);
+    color: var(--text-active-prompt);
+    border: 1px solid var(--text-active-prompt);
+  }
+  .mode-eng {
+    background-color: rgba(225, 29, 72, 0.1);
+    color: #e11d48;
+    border: 1px solid #e11d48;
   }
   
   #settings-panel {
@@ -186,7 +205,9 @@
   <button class="settings-btn" id="toggle-settings" title="設定・コース選択">⚙️</button>
 </div>
 
-<div class="notice-msg" id="global-notice">※ 変換キーで日本語モード(HSW)、無変換キーで英語モードに切り替わります</div>
+<div id="mode-indicator" class="mode-hsw" onclick="toggleInputMode()">
+  🌸 現在のモード：HSW配列 (無変換キーで英語へ)
+</div>
 
 <div id="settings-panel">
   <label for="course-select" style="color: var(--status-text); font-weight: bold;">練習コースを選択してください：</label>
@@ -264,21 +285,55 @@
   let gameInputValue = "";
 
   // =========================================================
-  // ★ データの非同期読み込みとアプリ起動 (Fetch API)
+  // ★ 入力モード管理（UI連動）
+  // =========================================================
+  function setInputMode(isEnglish) {
+      if (isEnglishMode === isEnglish) return;
+      isEnglishMode = isEnglish;
+      const indicator = document.getElementById('mode-indicator');
+      if (isEnglish) {
+          indicator.className = 'mode-eng';
+          indicator.innerHTML = '🔤 現在のモード：英語直接入力 (変換キーで日本語へ)';
+      } else {
+          indicator.className = 'mode-hsw';
+          indicator.innerHTML = '🌸 現在のモード：HSW配列 (無変換キーで英語へ)';
+      }
+  }
+
+  // 画面クリックで強制切り替えする関数
+  window.toggleInputMode = function() {
+      setInputMode(!isEnglishMode);
+      const activeInput = document.querySelector('.real-input:focus') || document.querySelector('.real-input') || document.getElementById('game-real-input');
+      if (activeInput) activeInput.focus();
+  };
+
+  // 変換・無変換キーの判定ロジック（keydown/keyup両方で使う）
+  function checkModeSwitchKeys(e) {
+      if (e.code === 'NonConvert' || e.key === 'NonConvert' || e.keyCode === 29) {
+          e.preventDefault();
+          setInputMode(true);
+          return true;
+      }
+      if (e.code === 'Convert' || e.key === 'Convert' || e.keyCode === 28) {
+          e.preventDefault();
+          setInputMode(false);
+          return true;
+      }
+      return false;
+  }
+
+  // =========================================================
+  // ★ データの非同期読み込み (Fetch API)
   // =========================================================
   async function initApp() {
     try {
-      // data/ フォルダから2つのファイルを同時に取得
       const [romanRes, courseRes] = await Promise.all([
-        fetch('data/romantable.txt'),
-        fetch('data/course.json')
+        fetch('../data/romantable.txt'),
+        fetch('../data/course.json')
       ]);
 
-      if (!romanRes.ok || !courseRes.ok) {
-        throw new Error("ファイルの取得に失敗しました。");
-      }
+      if (!romanRes.ok || !courseRes.ok) throw new Error("ファイルの取得に失敗しました。");
 
-      // ローマ字テーブルのパース
       const romanText = await romanRes.text();
       romanText.split('\n').forEach(line => {
         line = line.trim();
@@ -287,23 +342,16 @@
         if (parts.length >= 2) {
           const key = parts[0];
           const val = parts[parts.length - 1];
-          if (key && val) {
-            customKeyMap[key] = val;
-          }
+          if (key && val) customKeyMap[key] = val;
         }
       });
 
-      // コースデータの取得
       courseData = await courseRes.json();
-
-      // 初期化処理の実行
       buildDropdown();
-      if (courseSelect.options.length > 0) {
-        loadCourse(courseSelect.options[0].value);
-      }
+      if (courseSelect.options.length > 0) loadCourse(courseSelect.options[0].value);
     } catch (error) {
       console.error(error);
-      alert("データの読み込みに失敗しました。ローカルサーバー（Live Server等）で実行しているか確認してください。\n\n詳細: " + error.message);
+      alert("データの読み込みに失敗しました。\n\n詳細: " + error.message);
     }
   }
 
@@ -319,9 +367,7 @@
     while ((match = regex.exec(line)) !== null) {
       if (match.index > lastIndex) {
         const preText = line.substring(lastIndex, match.index);
-        for (const char of preText) {
-          tokens.push({ type: 'char', char: char, target: char });
-        }
+        for (const char of preText) tokens.push({ type: 'char', char: char, target: char });
       }
       const base = match[1] || match[3];
       const ruby = match[2] || match[4];
@@ -330,9 +376,7 @@
     }
     if (lastIndex < line.length) {
       const postText = line.substring(lastIndex);
-      for (const char of postText) {
-        tokens.push({ type: 'char', char: char, target: char });
-      }
+      for (const char of postText) tokens.push({ type: 'char', char: char, target: char });
     }
     return tokens;
   }
@@ -447,9 +491,6 @@
   // ★ モード切替と画面描画
   // =========================================================
   function loadCourse(courseName) {
-    const notice = document.getElementById('global-notice');
-    if(notice) notice.style.display = 'block';
-
     const rawLines = courseData[courseName];
     parsedCourse = rawLines.map(line => {
       const tokens = parseAozora(line);
@@ -644,12 +685,9 @@
 
   gameInputEl.addEventListener('keydown', function(e) {
     if(gameTimer <= 0) return;
-
-    if (e.code === 'NonConvert' || e.key === 'NonConvert') {
-      e.preventDefault();
-      isEnglishMode = true;
-      return;
-    }
+    
+    // ★ 修正：OSが飲み込んでも反応するように処理
+    if (checkModeSwitchKeys(e)) return;
 
     if (e.code === 'CapsLock' || e.key === 'Alphanumeric' || e.code === 'Lang2' || e.key === 'Backspace') {
       e.preventDefault();
@@ -665,11 +703,10 @@
     }
   });
 
+  // ★ 追加：keyupでも監視する（WindowsのIME吸収対策）
   gameInputEl.addEventListener('keyup', function(e) {
-    if (e.code === 'Convert' || e.key === 'Convert') {
-      e.preventDefault();
-      isEnglishMode = false;
-    }
+    if(gameTimer <= 0) return;
+    checkModeSwitchKeys(e);
   });
 
   function handleGameInputUpdate() {
@@ -919,11 +956,8 @@
           };
 
           inputField.addEventListener('keydown', (e) => {
-            if (e.code === 'NonConvert' || e.key === 'NonConvert') {
-              e.preventDefault();
-              isEnglishMode = true;
-              return;
-            }
+            // ★ 修正：OSが飲み込んでも反応するように処理
+            if (checkModeSwitchKeys(e)) return;
 
             if (e.code === 'CapsLock' || e.key === 'Alphanumeric' || e.code === 'Lang2' || e.key === 'Backspace') {
               e.preventDefault();
@@ -939,11 +973,9 @@
             }
           });
 
+          // ★ 追加：keyupでも監視する（WindowsのIME吸収対策）
           inputField.addEventListener('keyup', (e) => {
-            if (e.code === 'Convert' || e.key === 'Convert') {
-              e.preventDefault();
-              isEnglishMode = false;
-            }
+            checkModeSwitchKeys(e);
           });
 
           updateVisuals(normalInputValue, normalInputValue); 
@@ -981,8 +1013,9 @@
     }
   }
 
+  // ★ クリックでフォーカスが外れないように、モードインジケーターも除外対象に追加
   document.addEventListener('click', (e) => {
-    if (e.target.closest('#toggle-settings') || e.target.closest('#settings-panel') || e.target.closest('.load-btn')) return;
+    if (e.target.closest('#toggle-settings') || e.target.closest('#settings-panel') || e.target.closest('.load-btn') || e.target.closest('#mode-indicator')) return;
     
     if (isGameMode) {
        const gameInput = document.getElementById('game-real-input');
@@ -993,7 +1026,6 @@
     }
   });
 
-  // ★ アプリの起動（データの取得が完了した時点で呼ばれます）
   initApp();
 
 </script>
