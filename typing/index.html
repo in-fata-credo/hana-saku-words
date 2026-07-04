@@ -442,7 +442,88 @@
   let skipNextTimingGap = true;
   let nextExpectedKey = null;
 
-initSearchCaches  // 入力中にO(1)で即座に「ルートの正当性」と「次キー」を割り出す関数
+// ============================================================
+  // ★ 完全版：総当たりを排除した超軽量「辞書逆引き」アルゴリズム
+  // ============================================================
+  let validPathsForKana = {}; 
+  let validKeyChars = [];
+  let validMapPrefixes = new Set(); 
+
+  function initSearchCaches() {
+      validMapPrefixes.clear();
+      let physicalKeys = new Set();
+      
+      // 1. 物理キーとプレフィックスの抽出
+      for (let k in customKeyMap) {
+          if (k.length === 1 && !/[ァ-ヶぁ-ん]/.test(k)) {
+              physicalKeys.add(k.toLowerCase());
+          }
+          for(let i = 1; i <= k.length; i++) {
+              validMapPrefixes.add(k.substring(0, i));
+          }
+      }
+      "abcdefghijklmnopqrstuvwxyz-.,;:/@+*<>?1234567890".split('').forEach(c => physicalKeys.add(c));
+      validKeyChars = Array.from(physicalKeys);
+      
+      validPathsForKana = {};
+      
+      // 2. customKeyMapを「直前の状態」と「打ったキー」に分解し、状態遷移マップを作る
+      let transitionMap = {};
+      for (let k in customKeyMap) {
+          let val = customKeyMap[k];
+          let prefix = k.slice(0, -1); // 直前の状態（例：「カa」なら「カ」）
+          let trigger = k.slice(-1);   // 打ったキー（例：「カa」なら「a」）
+
+          if (!transitionMap[prefix]) transitionMap[prefix] = [];
+          transitionMap[prefix].push({ trigger: trigger, result: val });
+      }
+
+      // 3. グラフ探索（DFS）で、初期状態（空）から全ルートを一瞬で割り出す
+      function dfs(currentState, currentRawPath, visitedStates) {
+          if (currentRawPath.length >= 6) return; // 念のための深さ制限
+
+          let transitions = transitionMap[currentState];
+          if (transitions) {
+              for (let t of transitions) {
+                  let nextState = t.result;
+                  let nextRawPath = currentRawPath + t.trigger;
+                  
+                  // 同じ状態を繰り返す無駄なループ（例: ァq -> ァ）を枝刈りして無限ループを防止
+                  if (visitedStates.has(nextState)) continue;
+
+                  let isUnfinished = /[ァ-ヶ]/.test(nextState) && nextState !== 'ー' && nextState !== 'ヴ';
+                  
+                  // かな（確定文字）に到達したら辞書に登録
+                  if (!isUnfinished && nextState.length > 0) {
+                      let norm = normalizeForMatch(nextState);
+                      if (!validPathsForKana[norm]) validPathsForKana[norm] = [];
+                      validPathsForKana[norm].push(nextRawPath);
+                  }
+
+                  let newVisited = new Set(visitedStates);
+                  newVisited.add(nextState);
+                  dfs(nextState, nextRawPath, newVisited);
+              }
+          }
+      }
+
+      // 探索スタート
+      dfs("", "", new Set([""]));
+
+      // 4. 直接定義されている記号などの単発ルートも補完
+      for (let k in customKeyMap) {
+          let val = customKeyMap[k];
+          let isUnfinished = /[ァ-ヶ]/.test(val) && val !== 'ー' && val !== 'ヴ';
+          if (!isUnfinished && val.length > 0) {
+              let norm = normalizeForMatch(val);
+              if (!validPathsForKana[norm]) validPathsForKana[norm] = [];
+              if (!validPathsForKana[norm].includes(k)) {
+                  validPathsForKana[norm].push(k);
+              }
+          }
+      }
+  }
+  
   function getNextKeyInfo(unconfirmedRaw, remainingTarget) {
       if (remainingTarget.length === 0) return { isValid: true, nextKey: null };
       
