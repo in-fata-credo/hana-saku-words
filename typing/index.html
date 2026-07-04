@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>花咲く言葉 (HSW配列) - タイピングプラクティス v28.03</title>
+<title>花咲く言葉 (HSW配列) - タイピングプラクティス v28.04</title>
 <style>
   :root {
     --bg-color: #fcfbf9; 
@@ -324,7 +324,7 @@
 <body>
 
 <div class="header">
-  <h2>✿ 花咲く言葉 - タイピングの庭 v28.03</h2>
+  <h2>✿ 花咲く言葉 - タイピングの庭 v28.04</h2>
   <button class="settings-btn" id="toggle-settings" title="設定・コース選択">⚙️</button>
 </div>
 
@@ -444,7 +444,7 @@
   let nextExpectedKey = null;
 
   // ============================================================
-  // ★ ルート探索・次キー推測・NG判定用 キャッシュと関数群
+  // ★ ルート探索・次キー推測・NG判定用の完全改修ロジック
   // ============================================================
   let searchCache = {};
   let validMapPrefixes = new Set();
@@ -455,27 +455,24 @@
       validMapPrefixes.clear();
       let physicalKeys = new Set();
       for (let k in customKeyMap) {
-          // 物理的に叩ける（長さ1の非カタカナ/ひらがな）キーを抽出
           if (k.length === 1 && !/[ァ-ヶぁ-ん]/.test(k)) {
               physicalKeys.add(k.toLowerCase());
           }
-          // 有効なプレフィックスを全て抽出（枝刈り用）
           for (let i = 1; i <= k.length; i++) {
               validMapPrefixes.add(k.substring(0, i));
           }
       }
-      // 保険として標準的なキーボード文字を登録
       "abcdefghijklmnopqrstuvwxyz-.,;:/@+*<>?1234567890".split('').forEach(c => physicalKeys.add(c));
       validKeyChars = Array.from(physicalKeys);
       searchCache = {};
   }
 
-  // BFS（幅優先探索）を用いて「現在の入力状態から目標に到達できるか」と「次に打つべきキー」を高速で割り出す
-  function findNextKeyAndValidity(buffer, remainingTargetHira) {
-      if (!remainingTargetHira) return { isValid: true, nextKey: null };
+  // BFSによる完全なパスシミュレーション（指定された文字列から、目標に到達できるかを探索）
+  function findNextKeyAndValidity(buffer, remainingTargetReading) {
+      if (!remainingTargetReading) return { isValid: true, nextKey: null };
 
-      // 探索の深さを制限するため、目標プレフィックスを先頭4文字に絞る
-      let targetPrefix = remainingTargetHira.substring(0, 4);
+      // 探索の深さを抑えるため、目標プレフィックスを抽出
+      let targetPrefix = remainingTargetReading.substring(0, 4);
       let cacheKey = buffer + "|" + targetPrefix;
       if (searchCache[cacheKey]) return searchCache[cacheKey];
 
@@ -488,26 +485,32 @@
 
       while(queue.length > 0) {
           let curr = queue.shift();
-          let norm = normalizeForMatch(curr.text);
           
-          let isPrefix = (norm.length > 0 && targetPrefix.startsWith(norm));
+          // シミュレーション内の文字もカタカナ対応に自動変換（画面表示と同じロジック）
+          let adjustedCurr = "";
+          for (let i = 0; i < curr.text.length; i++) {
+              let typedChar = curr.text[i];
+              let expectedChar = targetPrefix[i];
+              if (expectedChar && hiraToKata(typedChar) === expectedChar) {
+                  typedChar = expectedChar;
+              }
+              adjustedCurr += typedChar;
+          }
+
+          let isPrefix = (adjustedCurr.length > 0 && targetPrefix.startsWith(adjustedCurr));
           
           if (isPrefix) {
-              // 探索によって入力状態が進み、かつ目標に合致した場合
-              if (curr.text !== buffer) {
+              if (adjustedCurr !== buffer) {
                   isValid = true;
                   nextKey = curr.path[0];
                   break;
               } else if (curr.path.length === 0) {
-                  // 最初から合致している場合（これ自体は有効だが、次キーを探すため探索は続行）
                   isValid = true;
               }
           }
           
-          // 深さ制限（HSWなら5手以内で必ずカタカナや平仮名に収束する）
-          if (curr.path.length >= 5) continue;
+          if (curr.path.length >= 5) continue; // 安全装置
 
-          // 大幅な枝刈り：現在プレフィックスに合致しておらず、かつサフィックスがcustomKeyMapに存在しないなら見込み無し
           if (!isPrefix) {
               let hasValidSuffix = false;
               for (let len = 1; len <= Math.min(curr.text.length, 6); len++) {
@@ -520,7 +523,6 @@
               if (!hasValidSuffix && curr.text !== "") continue;
           }
 
-          // 次の物理キーを1つ足してシミュレーション
           for (let c of validKeyChars) {
               let nextText = applyCustomIME(curr.text + c);
               if (!visited.has(nextText)) {
@@ -736,6 +738,12 @@
       isEnglishMode = isEnglish;
   }
 
+  window.toggleInputMode = function() {
+      setInputMode(!isEnglishMode);
+      const activeInput = document.querySelector('.real-input:focus') || document.querySelector('.real-input') || document.getElementById('game-real-input');
+      if (activeInput) activeInput.focus();
+  };
+
   let shiftRightDownTime = 0;
   let shiftRightModifierUsed = false;
 
@@ -797,7 +805,7 @@
       }
 
       if (!isFound) {
-        throw new Error("ファイルが見つかりません(404エラー)。\n\n【よくある原因】\n① JSONファイルの名前が「course.json.txt」になっている (Windowsの拡張子非表示による罠)\n② フォルダ名が大文字の「Data」になっている");
+        throw new Error("ファイルが見つかりません(404エラー)。");
       }
 
       const romanText = await romanRes.text();
@@ -812,15 +820,9 @@
         }
       });
       
-      // BFS用キャッシュの初期化
       initSearchCaches();
 
-      try {
-        courseData = await courseRes.json();
-      } catch (jsonError) {
-        throw new Error("course.json の書き方に文法エラーがあります。\n最後の項目の末尾に余計なカンマ(,)がないか、または記号が抜けていないか確認してください。\n詳細: " + jsonError.message);
-      }
-
+      courseData = await courseRes.json();
       buildDropdown();
       if (courseSelect.options.length > 0) loadCourse(courseSelect.options[0].value);
       
@@ -867,26 +869,10 @@
     }
   }
 
-  function zenkakuToHankaku(str) {
-      if (!str) return "";
-      return str.replace(/[Ａ-Ｚａ-ｚ０-９]/g, function(s) {
-          return String.fromCharCode(s.charCodeAt(0) - 0xFEE0);
-      });
-  }
-
-  const kataToHira = (str) => {
-    if (!str) return "";
-    return str.replace(/[\u30A1-\u30F6]/g, match => String.fromCharCode(match.charCodeAt(0) - 0x60));
-  };
-  
   const hiraToKata = (str) => {
     if (!str) return "";
     return str.replace(/[\u3041-\u3096]/g, match => String.fromCharCode(match.charCodeAt(0) + 0x60));
   };
-
-  function normalizeForMatch(str) {
-      return zenkakuToHankaku(kataToHira(str)).toLowerCase();
-  }
 
   function applyCustomIME(inputStr) {
     let result = "";
@@ -954,8 +940,7 @@
     parsedCourse = rawLines.map(line => {
       const tokens = parseAozora(line);
       const targetLine = tokens.map(t => t.target).join('');
-      const targetLineHira = normalizeForMatch(targetLine);
-      return { rawLine: line, tokens, targetLine, targetLineHira };
+      return { rawLine: line, tokens, targetLine };
     });
 
     if (courseName.includes("ゲーム")) {
@@ -1047,19 +1032,24 @@
     document.getElementById('game-real-input').focus();
   }
 
-  function updateGameVisuals(val, rawVal) {
+  function updateGameVisuals(val) {
     if(!currentWordObj) return;
-    if (rawVal === undefined) rawVal = val;
 
-    let matchVal = normalizeForMatch(val);
-    let matchTarget = normalizeForMatch(currentWordObj.targetLineHira);
+    let targetReading = currentWordObj.tokens.map(t => t.target).join('');
+    
+    let adjustedVal = "";
+    for (let i = 0; i < val.length; i++) {
+        let typedChar = val[i];
+        let targetChar = targetReading[i];
+        if (targetChar && hiraToKata(typedChar) === targetChar) {
+            typedChar = targetChar;
+        }
+        adjustedVal += typedChar;
+    }
 
     let matchLen = 0;
-    for (let i = 0; i < matchVal.length; i++) {
-        if (/[ァ-ヶ]/.test(rawVal[i]) && rawVal[i] !== 'ー') {
-            break;
-        }
-        if (matchVal[i] === matchTarget[i]) matchLen++;
+    for (let i = 0; i < adjustedVal.length; i++) {
+        if (adjustedVal[i] === targetReading[i]) matchLen++;
         else break;
     }
 
@@ -1100,9 +1090,8 @@
             let confirmedStr = remainingVal.substring(0, currentMatch);
             for (let j = 0; j < confirmedStr.length; j++) {
                 let char = confirmedStr[j];
-                let targetChar = currentWordObj.targetLine[matchLen - currentMatch + j];
+                let targetChar = targetReading[matchLen - currentMatch + j];
                 if (targetChar && hiraToKata(char) === targetChar) char = targetChar;
-                if (targetChar && char.toLowerCase() === targetChar.toLowerCase()) char = targetChar;
                 typedText += char;
             }
             typedText = `<span style="color: var(--text-completed); font-weight: bold;">${escapeHTML(typedText)}</span>`;
@@ -1110,12 +1099,10 @@
             let extra = remainingVal.substring(currentMatch);
             let frameLastStatus = 'match';
             
-            // ★ AI推測・NG判定ロジックの統合
-            let remainingTarget = matchTarget.substring(matchLen);
+            let remainingTarget = targetReading.substring(matchLen);
             let searchResult = findNextKeyAndValidity(extra, remainingTarget);
             let isValid = searchResult.isValid;
 
-            // ハイライト更新
             if (nextExpectedKey) {
                 const prevEl = document.getElementById('kb-key-' + nextExpectedKey);
                 if (prevEl) prevEl.classList.remove('next-highlight');
@@ -1126,7 +1113,6 @@
                 if (nextEl) nextEl.classList.add('next-highlight');
             }
 
-            // 描画（BFSの判定に基づく）
             for (let j = 0; j < extra.length; j++) {
               let char = extra[j];
               if (isValid) {
@@ -1198,27 +1184,24 @@
     }
     gameInputValue = val;
 
+    updateGameVisuals(val);
+
+    let targetReading = currentWordObj.tokens.map(t => t.target).join('');
     let adjustedVal = "";
     for (let i = 0; i < val.length; i++) {
         let typedChar = val[i];
-        let targetChar = currentWordObj.targetLine[i]; 
-        if (targetChar && hiraToKata(typedChar) === targetChar) {
-          typedChar = targetChar;
-        }
+        let targetChar = targetReading[i];
+        if (targetChar && hiraToKata(typedChar) === targetChar) typedChar = targetChar;
         adjustedVal += typedChar;
     }
 
-    updateGameVisuals(adjustedVal, val);
-
-    let matchVal = normalizeForMatch(val);
-    let matchTarget = normalizeForMatch(currentWordObj.targetLineHira);
-
-    let hasState = false;
-    for(let c of val) {
-       if(/[ァ-ヶ]/.test(c) && c !== 'ー') hasState = true;
+    let matchLen = 0;
+    for (let i = 0; i < adjustedVal.length; i++) {
+        if (adjustedVal[i] === targetReading[i]) matchLen++;
+        else break;
     }
 
-    if (matchVal === matchTarget && matchTarget.length > 0 && !hasState) {
+    if (matchLen === targetReading.length && val.length === targetReading.length) {
         totalChars += currentWordObj.targetLine.length;
         const { displayChars, moraCount } = computeLineMetrics(currentWordObj);
         statsDisplayCharsTotal += displayChars;
@@ -1302,16 +1285,22 @@
           normalInputValue = ""; 
           inputField.focus();
 
-          const updateVisuals = (val, rawVal) => {
-            if (rawVal === undefined) rawVal = val;
+          const updateVisuals = (val) => {
+            let targetReading = parsed.tokens.map(t => t.target).join('');
 
-            let matchVal = normalizeForMatch(val);
-            let matchTarget = normalizeForMatch(parsed.targetLineHira);
+            let adjustedVal = "";
+            for (let i = 0; i < val.length; i++) {
+                let typedChar = val[i];
+                let targetChar = targetReading[i];
+                if (targetChar && hiraToKata(typedChar) === targetChar) {
+                    typedChar = targetChar;
+                }
+                adjustedVal += typedChar;
+            }
 
             let matchLen = 0;
-            for (let i = 0; i < matchVal.length; i++) {
-                if (/[ァ-ヶ]/.test(rawVal[i]) && rawVal[i] !== 'ー') break;
-                if (matchVal[i] === matchTarget[i]) matchLen++;
+            for (let i = 0; i < adjustedVal.length; i++) {
+                if (adjustedVal[i] === targetReading[i]) matchLen++;
                 else break;
             }
 
@@ -1355,9 +1344,8 @@
                 let confirmedStr = remainingVal.substring(0, currentMatch);
                 for (let j = 0; j < confirmedStr.length; j++) {
                     let char = confirmedStr[j];
-                    let targetChar = parsed.targetLine[matchLen - currentMatch + j];
+                    let targetChar = targetReading[matchLen - currentMatch + j];
                     if (targetChar && hiraToKata(char) === targetChar) char = targetChar;
-                    if (targetChar && char.toLowerCase() === targetChar.toLowerCase()) char = targetChar;
                     typedText += char;
                 }
                 typedText = `<span style="color: var(--text-completed); font-weight: bold;">${escapeHTML(typedText)}</span>`;
@@ -1365,12 +1353,10 @@
                 let extra = remainingVal.substring(currentMatch);
                 let frameLastStatus = 'match';
                 
-                // ★ AI推測・NG判定ロジックの統合
-                let remainingTarget = matchTarget.substring(matchLen);
+                let remainingTarget = targetReading.substring(matchLen);
                 let searchResult = findNextKeyAndValidity(extra, remainingTarget);
                 let isValid = searchResult.isValid;
 
-                // ハイライト更新
                 if (nextExpectedKey) {
                     const prevEl = document.getElementById('kb-key-' + nextExpectedKey);
                     if (prevEl) prevEl.classList.remove('next-highlight');
@@ -1381,7 +1367,6 @@
                     if (nextEl) nextEl.classList.add('next-highlight');
                 }
 
-                // 描画（BFSの判定に基づく）
                 for (let j = 0; j < extra.length; j++) {
                   let char = extra[j];
                   if (isValid) {
@@ -1426,32 +1411,29 @@
             }
             normalInputValue = val;
 
+            updateVisuals(val); 
+
+            let targetReading = parsed.tokens.map(t => t.target).join('');
             let adjustedVal = "";
             for (let i = 0; i < val.length; i++) {
-              let typedChar = val[i];
-              let targetChar = parsed.targetLine[i]; 
-              if (targetChar && hiraToKata(typedChar) === targetChar) {
-                typedChar = targetChar;
-              }
-              adjustedVal += typedChar;
+                let typedChar = val[i];
+                let targetChar = targetReading[i];
+                if (targetChar && hiraToKata(typedChar) === targetChar) typedChar = targetChar;
+                adjustedVal += typedChar;
             }
 
-            updateVisuals(adjustedVal, val); 
-
-            let matchVal = normalizeForMatch(val);
-            let matchTarget = normalizeForMatch(parsed.targetLineHira);
-
-            let hasState = false;
-            for(let c of val) {
-               if(/[ァ-ヶ]/.test(c) && c !== 'ー') hasState = true;
+            let matchLen = 0;
+            for (let i = 0; i < adjustedVal.length; i++) {
+                if (adjustedVal[i] === targetReading[i]) matchLen++;
+                else break;
             }
 
-            if (matchVal === matchTarget && matchTarget.length > 0 && !hasState) {
+            if (matchLen === targetReading.length && val.length === targetReading.length) {
               totalChars += parsed.targetLine.length;
               const { displayChars, moraCount } = computeLineMetrics(parsed);
               statsDisplayCharsTotal += displayChars;
               statsMoraTotal += moraCount;
-              skipNextTimingGap = true; // 次の行の最初の1打は「思考時間」なので計測除外
+              skipNextTimingGap = true; 
               currentIndex++;
               renderLines();
               
@@ -1487,7 +1469,7 @@
             handleShiftTapUp(e);
           });
 
-          updateVisuals(normalInputValue, normalInputValue); 
+          updateVisuals(normalInputValue); 
 
         } else {
           inputDiv.querySelector('.real-input').focus();
