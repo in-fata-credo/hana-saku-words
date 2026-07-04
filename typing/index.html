@@ -1,0 +1,1524 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>花咲く言葉 (HSW配列) - タイピングプラクティス v28.04</title>
+<style>
+  :root {
+    --bg-color: #fcfbf9; 
+    --text-completed: #333333;
+    --text-upcoming: #555555; 
+    --text-active-prompt: #769566; 
+    --status-text: #b09c85; 
+    --border-line: #eaeaea;
+    --font-size: 32px;
+    --letter-spacing: 0.05em;
+  }
+  body {
+    font-family: "Yu Mincho", "Shippori Mincho", "Noto Serif JP", serif;
+    background-color: var(--bg-color);
+    color: var(--text-completed);
+    max-width: 1000px;
+    margin: 0 auto;
+    padding: 60px 30px;
+    overflow-y: auto;
+  }
+  
+  .header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+  }
+  h2 {
+    color: var(--status-text);
+    font-size: 18px;
+    font-weight: bold;
+    margin: 0;
+    letter-spacing: 0.1em;
+  }
+  .settings-btn {
+    background: none;
+    border: none;
+    font-size: 24px;
+    cursor: pointer;
+    color: var(--status-text);
+    transition: color 0.2s;
+  }
+  .settings-btn:hover { color: var(--text-active-prompt); }
+
+  #settings-panel {
+    display: none;
+    background: #ffffff;
+    padding: 20px;
+    border-radius: 8px;
+    margin-bottom: 40px;
+    border: 1px solid var(--border-line);
+    box-shadow: 0 4px 15px rgba(0,0,0,0.02);
+  }
+  select {
+    width: 100%;
+    padding: 12px;
+    font-size: 16px;
+    background: #fdfdfc;
+    color: #333;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    margin-top: 10px;
+    outline: none;
+    font-family: sans-serif;
+  }
+  
+  .load-btn {
+    display: inline-block;
+    background-color: var(--text-active-prompt);
+    color: #ffffff;
+    border: none;
+    padding: 10px 16px;
+    font-size: 14px;
+    border-radius: 6px;
+    cursor: pointer;
+    margin-top: 10px;
+    transition: background-color 0.2s;
+    font-family: sans-serif;
+  }
+  .load-btn:hover { background-color: #5c754f; }
+
+  #text-container {
+    min-height: 300px;
+    margin-bottom: 40px;
+  }
+  .line-block {
+    margin-bottom: 40px;
+    transition: margin 0.3s ease;
+  }
+  .line-block.completed-block { margin-bottom: 5px; }
+
+  #game-board {
+    display: none;
+    padding: 20px 0;
+    text-align: center;
+  }
+  .game-timer-wrapper {
+    width: 100%; height: 8px; background: #eee; border-radius: 4px; margin-bottom: 40px; overflow: hidden;
+  }
+  #game-timer-fill {
+    width: 100%; height: 100%; background: var(--text-active-prompt); transition: width 0.1s linear;
+  }
+  #game-play-area {
+    min-height: 250px; position: relative;
+    display: flex; align-items: center; justify-content: center;
+  }
+  #game-visual-wrapper .prompt-layer, #game-visual-wrapper .input-layer {
+    font-size: 56px; 
+  }
+  @keyframes pop {
+    0% { transform: scale(1); opacity: 1; }
+    40% { transform: scale(1.15); opacity: 0.8; color: var(--text-active-prompt); }
+    100% { transform: scale(0.8); opacity: 0; }
+  }
+  .pop-anim {
+    animation: pop 0.15s cubic-bezier(0.1, 0.8, 0.3, 1) forwards;
+  }
+
+  .visual-tokens-container {
+    display: flex; flex-wrap: wrap; align-items: flex-end; row-gap: 20px;
+  }
+  .token-wrapper {
+    display: inline-flex; 
+    flex-direction: column; 
+    justify-content: flex-end; 
+    align-items: flex-start; 
+  }
+  .prompt-layer {
+    display: flex; align-items: baseline; justify-content: flex-start; margin-top: auto; margin-bottom: 4px; color: var(--text-upcoming); font-size: var(--font-size);
+    font-weight: bold; 
+  }
+  .prompt-layer ruby, .prompt-layer span { line-height: 1.1; }
+  .input-layer {
+    display: flex; align-items: flex-start; justify-content: flex-start; min-height: 1.5em; font-size: var(--font-size);
+  }
+  .input-layer span { line-height: 1.1; }
+
+  ruby { ruby-position: over; ruby-align: center; }
+  rt { font-size: 0.5em; color: inherit; transform: translateY(-2px); opacity: 0.9; font-weight: bold; }
+
+  .input-space { position: relative; width: 100%; }
+  .real-input {
+    position: absolute; top: 0; left: 0; width: 100%; height: 100%; opacity: 0; z-index: 2; outline: none;
+  }
+
+  .state { color: var(--status-text); font-weight: bold; font-family: sans-serif; }
+  .mistake { color: #e11d48; font-weight: bold; background: rgba(225,29,72,0.1); border-radius: 4px; padding: 0 2px; }
+  .custom-caret {
+    display: inline-block; width: 3px; height: 1.1em; background-color: var(--text-active-prompt); animation: blink 1s step-end infinite; margin-left: 2px; transform: translateY(3px);
+  }
+  @keyframes blink { 50% { opacity: 0; } }
+
+  .status-bar {
+    display: flex; justify-content: space-between; padding-top: 25px; padding-bottom: 25px; font-size: 20px; color: var(--status-text); border-top: 1px solid var(--border-line); background-color: rgba(252, 251, 249, 0.95); font-family: sans-serif;
+  }
+  .val { color: var(--text-completed); font-weight: bold; }
+
+  /* ============================================================
+     右上パラメータ / 右下データ / 下部キーボードヒートマップ
+     ============================================================ */
+  body { padding-bottom: 200px; }
+
+  #stats-sidebar {
+    position: fixed;
+    top: 90px;
+    right: 20px;
+    width: 210px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    z-index: 30;
+    font-family: sans-serif;
+  }
+  .side-panel {
+    background: #ffffff;
+    border: 1px solid var(--border-line);
+    border-radius: 10px;
+    padding: 14px 16px;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.04);
+  }
+  .side-panel-title {
+    font-size: 13px;
+    font-weight: bold;
+    color: var(--status-text);
+    letter-spacing: 0.05em;
+    margin-bottom: 8px;
+  }
+  .metric-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    font-size: 13px;
+    color: var(--status-text);
+    padding: 3px 0;
+  }
+  .metric-value {
+    color: var(--text-completed);
+    font-weight: bold;
+    font-size: 15px;
+  }
+  .metric-value.warn { color: #e11d48; }
+
+  #mistake-sidebar {
+    position: fixed;
+    bottom: 160px;
+    right: 20px;
+    width: 210px;
+    z-index: 30;
+    font-family: sans-serif;
+  }
+  #mistake-list {
+    font-size: 13px;
+    color: var(--status-text);
+    max-height: 260px;
+    overflow-y: auto;
+  }
+  .mistake-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 5px 0;
+    border-bottom: 1px dashed var(--border-line);
+  }
+  .mistake-item:last-child { border-bottom: none; }
+  .mistake-kana {
+    font-size: 18px;
+    font-weight: bold;
+    color: var(--text-completed);
+  }
+  .mistake-tag {
+    font-size: 10px;
+    padding: 2px 6px;
+    border-radius: 10px;
+    margin-left: 6px;
+    font-weight: bold;
+  }
+  .mistake-tag.miss { background: rgba(225,29,72,0.12); color: #e11d48; }
+  .mistake-tag.slow { background: rgba(176,156,133,0.15); color: var(--status-text); }
+  .mistake-count { font-size: 11px; color: var(--status-text); }
+
+  #keyboard-heatmap-wrapper {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    background: rgba(255,255,255,0.97);
+    border-top: 1px solid var(--border-line);
+    box-shadow: 0 -4px 15px rgba(0,0,0,0.04);
+    padding: 10px 0 12px;
+    z-index: 40;
+    font-family: sans-serif;
+  }
+  #keyboard-heatmap-title {
+    text-align: center;
+    font-size: 11px;
+    color: var(--status-text);
+    font-weight: bold;
+    letter-spacing: 0.05em;
+    margin-bottom: 6px;
+  }
+  #keyboard-heatmap {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+  }
+  .kb-row {
+    display: flex;
+    gap: 4px;
+  }
+  .kb-key {
+    position: relative;
+    min-width: 30px;
+    height: 30px;
+    border-radius: 5px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    font-weight: bold;
+    color: #333;
+    background: #eee;
+    border: 1px solid rgba(0,0,0,0.05);
+    transition: background-color 0.3s ease, color 0.1s, transform 0.1s;
+  }
+  
+  /* 次に押すべきキーの強調スタイル（黒セル＋赤文字＋文字大） */
+  .kb-key.next-highlight {
+    background-color: #000000 !important;
+    color: #ff3333 !important;
+    font-size: 20px !important;
+    font-weight: 900 !important;
+    transform: scale(1.15);
+    z-index: 10;
+    border: 2px solid #ff3333 !important;
+    box-shadow: 0 0 8px rgba(255, 51, 51, 0.4);
+  }
+
+  .kb-key .kb-miss-badge {
+    position: absolute;
+    top: -6px;
+    right: -6px;
+    background: #e11d48;
+    color: #fff;
+    font-size: 9px;
+    line-height: 1;
+    padding: 2px 3px;
+    border-radius: 8px;
+    min-width: 12px;
+    text-align: center;
+  }
+
+  @media (max-width: 1300px) {
+    #stats-sidebar, #mistake-sidebar { display: none; }
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h2>✿ 花咲く言葉 - タイピングの庭 v28.04</h2>
+  <button class="settings-btn" id="toggle-settings" title="設定・コース選択">⚙️</button>
+</div>
+
+<div id="settings-panel">
+  <label for="course-select" style="color: var(--status-text); font-weight: bold;">練習コースを選択してください：</label>
+  <select id="course-select"></select>
+  
+  <div style="margin-top: 25px; padding-top: 20px; border-top: 1px solid var(--border-line);">
+    <button class="load-btn" onclick="document.getElementById('folder-input').click();">
+      📁 フォルダから自作テキスト(.txt)を読み込む
+    </button>
+    <input type="file" id="folder-input" webkitdirectory directory multiple style="display: none;">
+  </div>
+</div>
+
+<div id="text-container"></div>
+
+<div id="game-board">
+   <div style="font-size: 24px; color: var(--status-text); margin-bottom: 20px; font-weight: bold;">
+      🍣 単語スプリント (残り <span id="game-time-text" style="color: var(--text-completed);">60.0</span>秒)
+   </div>
+   <div class="game-timer-wrapper">
+      <div id="game-timer-fill"></div>
+   </div>
+   
+   <div id="game-play-area">
+      <div class="input-space" id="game-input-space" style="display: flex; justify-content: center;">
+         <div tabindex="0" class="real-input" id="game-real-input"></div>
+         <div class="visual-wrapper" id="game-visual-wrapper" style="position: relative; z-index:1;"></div>
+      </div>
+   </div>
+
+   <div style="font-size: 28px; font-weight: bold; color: var(--text-completed); margin-top: 30px;">
+      食べた皿: <span id="game-score-val" style="color: var(--text-active-prompt); font-size: 40px; margin-left: 10px;">0</span> 皿
+   </div>
+</div>
+
+<div class="status-bar">
+  <div>進捗: <span id="progress" class="val">0 / 0</span></div>
+  <div>時間: <span id="time" class="val">0.0s</span></div>
+  <div>CPM: <span id="kpm" class="val">0</span></div>
+</div>
+
+<div id="stats-sidebar">
+  <div class="side-panel">
+    <div class="side-panel-title">⚡ 速度</div>
+    <div class="metric-row"><span>CPM</span><span class="metric-value" id="stat-cpm">0</span></div>
+    <div class="metric-row"><span>MPM</span><span class="metric-value" id="stat-mpm">0</span></div>
+    <div class="metric-row"><span>KPM1 (KPM2)</span><span class="metric-value" id="stat-kpm12">0 (0)</span></div>
+  </div>
+  <div class="side-panel">
+    <div class="side-panel-title">🎯 正確性</div>
+    <div class="metric-row"><span>打鍵正確性</span><span class="metric-value" id="stat-key-acc">100%</span></div>
+    <div class="metric-row"><span>確定正確性</span><span class="metric-value" id="stat-confirm-acc">100%</span></div>
+  </div>
+</div>
+
+<div id="mistake-sidebar">
+  <div class="side-panel">
+    <div class="side-panel-title">🐢 苦手な文字</div>
+    <div id="mistake-list">まだデータがありません</div>
+  </div>
+</div>
+
+<div id="keyboard-heatmap-wrapper">
+  <div id="keyboard-heatmap-title">キー別ヒートマップ（色 = 速度 / 赤バッジ = ミス回数）</div>
+  <div id="keyboard-heatmap"></div>
+</div>
+
+<script>
+  let customKeyMap = {
+    ",": "、", ".": "。", "-": "ー", "?": "？", "!": "！"
+  };
+  let courseData = {};
+
+  const toggleBtn = document.getElementById('toggle-settings');
+  const settingsPanel = document.getElementById('settings-panel');
+  const courseSelect = document.getElementById('course-select');
+  const textContainer = document.getElementById('text-container');
+  const progressSpan = document.getElementById('progress');
+  const timeSpan = document.getElementById('time');
+  const kpmSpan = document.getElementById('kpm');
+  const folderInput = document.getElementById('folder-input');
+
+  let parsedCourse = [];
+  let currentIndex = 0;
+  let startTime = null;
+  let timerInterval = null;
+  let totalChars = 0;
+  
+  let isGameMode = false;
+  let gameTimer = 60.0;
+  let gameScore = 0;
+  let gameInterval = null;
+  let gameWordsPool = [];
+  let currentWordObj = null;
+
+  let isEnglishMode = false;
+  let normalInputValue = "";
+  let gameInputValue = "";
+
+  let statsKpm1 = 0;
+  let statsKpm2 = 0;
+  let statsMistakeConfirmed = 0;
+  let statsDisplayCharsTotal = 0;
+  let statsMoraTotal = 0;
+
+  let lastCharStatus = null;
+  let lastActiveTargetChar = null;
+
+  let keyStats = {};
+  let kanaStats = {};
+
+  let lastKeyTimestamp = null;
+  let skipNextTimingGap = true;
+  
+  let nextExpectedKey = null;
+
+  // ============================================================
+  // ★ ルート探索・次キー推測・NG判定用の完全改修ロジック
+  // ============================================================
+  let searchCache = {};
+  let validMapPrefixes = new Set();
+  let validKeyChars = [];
+
+  // アプリ起動時にcustomKeyMapから検索用データを構築
+  function initSearchCaches() {
+      validMapPrefixes.clear();
+      let physicalKeys = new Set();
+      for (let k in customKeyMap) {
+          if (k.length === 1 && !/[ァ-ヶぁ-ん]/.test(k)) {
+              physicalKeys.add(k.toLowerCase());
+          }
+          for (let i = 1; i <= k.length; i++) {
+              validMapPrefixes.add(k.substring(0, i));
+          }
+      }
+      "abcdefghijklmnopqrstuvwxyz-.,;:/@+*<>?1234567890".split('').forEach(c => physicalKeys.add(c));
+      validKeyChars = Array.from(physicalKeys);
+      searchCache = {};
+  }
+
+  // BFSによる完全なパスシミュレーション（指定された文字列から、目標に到達できるかを探索）
+  function findNextKeyAndValidity(buffer, remainingTargetReading) {
+      if (!remainingTargetReading) return { isValid: true, nextKey: null };
+
+      // 探索の深さを抑えるため、目標プレフィックスを抽出
+      let targetPrefix = remainingTargetReading.substring(0, 4);
+      let cacheKey = buffer + "|" + targetPrefix;
+      if (searchCache[cacheKey]) return searchCache[cacheKey];
+
+      let queue = [ { text: buffer, path: [] } ];
+      let visited = new Set();
+      visited.add(buffer);
+      
+      let isValid = false;
+      let nextKey = null;
+
+      while(queue.length > 0) {
+          let curr = queue.shift();
+          
+          // シミュレーション内の文字もカタカナ対応に自動変換（画面表示と同じロジック）
+          let adjustedCurr = "";
+          for (let i = 0; i < curr.text.length; i++) {
+              let typedChar = curr.text[i];
+              let expectedChar = targetPrefix[i];
+              if (expectedChar && hiraToKata(typedChar) === expectedChar) {
+                  typedChar = expectedChar;
+              }
+              adjustedCurr += typedChar;
+          }
+
+          let isPrefix = (adjustedCurr.length > 0 && targetPrefix.startsWith(adjustedCurr));
+          
+          if (isPrefix) {
+              if (adjustedCurr !== buffer) {
+                  isValid = true;
+                  nextKey = curr.path[0];
+                  break;
+              } else if (curr.path.length === 0) {
+                  isValid = true;
+              }
+          }
+          
+          if (curr.path.length >= 5) continue; // 安全装置
+
+          if (!isPrefix) {
+              let hasValidSuffix = false;
+              for (let len = 1; len <= Math.min(curr.text.length, 6); len++) {
+                  let suffix = curr.text.slice(-len);
+                  if (validMapPrefixes.has(suffix)) {
+                      hasValidSuffix = true;
+                      break;
+                  }
+              }
+              if (!hasValidSuffix && curr.text !== "") continue;
+          }
+
+          for (let c of validKeyChars) {
+              let nextText = applyCustomIME(curr.text + c);
+              if (!visited.has(nextText)) {
+                  visited.add(nextText);
+                  queue.push({ text: nextText, path: [...curr.path, c] });
+              }
+          }
+      }
+      
+      let result = { isValid, nextKey };
+      searchCache[cacheKey] = result;
+      return result;
+  }
+
+  function resetSessionStats() {
+    statsKpm1 = 0;
+    statsKpm2 = 0;
+    statsMistakeConfirmed = 0;
+    statsDisplayCharsTotal = 0;
+    statsMoraTotal = 0;
+    lastCharStatus = null;
+    lastActiveTargetChar = null;
+    keyStats = {};
+    kanaStats = {};
+    lastKeyTimestamp = null;
+    skipNextTimingGap = true;
+    nextExpectedKey = null;
+    renderHeatmap();
+    renderMistakeList();
+    updateStatsPanel(0);
+  }
+
+  function countMora(str) {
+    if (!str) return 0;
+    let count = 0;
+    for (const ch of str) {
+      if (/[ゃゅょャュョ]/.test(ch)) continue;
+      count++;
+    }
+    return count;
+  }
+
+  function computeLineMetrics(parsed) {
+    let displayChars = 0;
+    let moraCount = 0;
+    parsed.tokens.forEach(token => {
+      const disp = token.type === 'ruby' ? token.base : token.char;
+      displayChars += disp.length;
+      moraCount += countMora(token.target);
+    });
+    return { displayChars, moraCount };
+  }
+
+  function recordKeystroke(rawKey) {
+    const now = performance.now();
+    let delta = null;
+    if (!skipNextTimingGap && lastKeyTimestamp !== null) {
+      delta = now - lastKeyTimestamp;
+    }
+    lastKeyTimestamp = now;
+    skipNextTimingGap = false;
+
+    statsKpm2++;
+    const physKey = (rawKey && rawKey.length === 1) ? rawKey.toLowerCase() : rawKey;
+    if (!keyStats[physKey]) keyStats[physKey] = { timeSum: 0, timeCount: 0, missCount: 0, pressCount: 0 };
+    const ks = keyStats[physKey];
+    ks.pressCount++;
+    if (delta !== null) { ks.timeSum += delta; ks.timeCount++; }
+
+    const targetKana = lastActiveTargetChar;
+    if (lastCharStatus === 'mistake') {
+      statsMistakeConfirmed++;
+      ks.missCount++;
+      if (targetKana) {
+        if (!kanaStats[targetKana]) kanaStats[targetKana] = { timeSum: 0, timeCount: 0, missCount: 0 };
+        kanaStats[targetKana].missCount++;
+      }
+    } else {
+      statsKpm1++;
+    }
+
+    if (targetKana && delta !== null) {
+      if (!kanaStats[targetKana]) kanaStats[targetKana] = { timeSum: 0, timeCount: 0, missCount: 0 };
+      kanaStats[targetKana].timeSum += delta;
+      kanaStats[targetKana].timeCount++;
+    }
+  }
+
+  function recordDeletion() {
+    statsKpm2++;
+    lastKeyTimestamp = performance.now();
+  }
+
+  function updateStatsPanel(elapsedSeconds) {
+    const cpmEl = document.getElementById('stat-cpm');
+    const mpmEl = document.getElementById('stat-mpm');
+    const kpm12El = document.getElementById('stat-kpm12');
+    const keyAccEl = document.getElementById('stat-key-acc');
+    const confirmAccEl = document.getElementById('stat-confirm-acc');
+    if (!cpmEl) return;
+
+    const minutes = elapsedSeconds / 60;
+    const cpm = minutes > 0 ? Math.round(statsDisplayCharsTotal / minutes) : 0;
+    const mpm = minutes > 0 ? Math.round(statsMoraTotal / minutes) : 0;
+    const kpm1 = minutes > 0 ? Math.round(statsKpm1 / minutes) : 0;
+    const kpm2 = minutes > 0 ? Math.round(statsKpm2 / minutes) : 0;
+
+    cpmEl.textContent = cpm;
+    mpmEl.textContent = mpm;
+    kpm12El.textContent = `${kpm1} (${kpm2})`;
+
+    const keyAcc = statsKpm2 > 0 ? (statsKpm1 / statsKpm2 * 100) : 100;
+    const confirmAcc = statsMoraTotal > 0 ? ((1 - statsMistakeConfirmed / statsMoraTotal) * 100) : 100;
+
+    keyAccEl.textContent = keyAcc.toFixed(1) + '%';
+    keyAccEl.className = 'metric-value' + (keyAcc < 90 ? ' warn' : '');
+    confirmAccEl.textContent = confirmAcc.toFixed(1) + '%';
+    confirmAccEl.className = 'metric-value' + (confirmAcc < 90 ? ' warn' : '');
+  }
+
+  function renderMistakeList() {
+    const listEl = document.getElementById('mistake-list');
+    if (!listEl) return;
+
+    const entries = Object.keys(kanaStats).map(kana => {
+      const s = kanaStats[kana];
+      const avgTime = s.timeCount > 0 ? s.timeSum / s.timeCount : null;
+      return { kana, missCount: s.missCount, avgTime };
+    });
+
+    if (entries.length === 0) {
+      listEl.innerHTML = 'まだデータがありません';
+      return;
+    }
+
+    const timedEntries = entries.filter(e => e.avgTime !== null);
+    const overallAvg = timedEntries.length > 0
+      ? timedEntries.reduce((sum, e) => sum + e.avgTime, 0) / timedEntries.length
+      : 0;
+    const slowThreshold = overallAvg * 1.6;
+
+    const flagged = entries.filter(e => e.missCount > 0 || (e.avgTime !== null && overallAvg > 0 && e.avgTime > slowThreshold));
+
+    flagged.sort((a, b) => {
+      const scoreA = a.missCount * 1000 + (a.avgTime || 0);
+      const scoreB = b.missCount * 1000 + (b.avgTime || 0);
+      return scoreB - scoreA;
+    });
+
+    if (flagged.length === 0) {
+      listEl.innerHTML = '苦手な文字はまだありません👍';
+      return;
+    }
+
+    let html = '';
+    flagged.slice(0, 10).forEach(e => {
+      let tags = '';
+      if (e.missCount > 0) tags += `<span class="mistake-tag miss">ミス x${e.missCount}</span>`;
+      if (e.avgTime !== null && overallAvg > 0 && e.avgTime > slowThreshold) {
+        tags += `<span class="mistake-tag slow">${Math.round(e.avgTime)}ms</span>`;
+      }
+      html += `<div class="mistake-item"><span class="mistake-kana">${escapeHTML(e.kana)}</span><span>${tags}</span></div>`;
+    });
+    listEl.innerHTML = html;
+  }
+
+  const KEYBOARD_ROWS = [
+    ['1','2','3','4','5','6','7','8','9','0','-'],
+    ['q','w','e','r','t','y','u','i','o','p'],
+    ['a','s','d','f','g','h','j','k','l',';'],
+    ['z','x','c','v','b','n','m',',','.','/']
+  ];
+
+  function timeToColor(t, minT, maxT) {
+    if (t === null || maxT <= minT) return '#eee';
+    const ratio = Math.max(0, Math.min(1, (t - minT) / (maxT - minT)));
+    const hue = (1 - ratio) * 120;
+    return `hsl(${hue}, 65%, 70%)`;
+  }
+
+  function renderHeatmap() {
+    const container = document.getElementById('keyboard-heatmap');
+    if (!container) return;
+
+    const avgTimes = Object.keys(keyStats)
+      .map(k => keyStats[k].timeCount > 0 ? keyStats[k].timeSum / keyStats[k].timeCount : null)
+      .filter(t => t !== null);
+    const minT = avgTimes.length > 0 ? Math.min(...avgTimes) : 0;
+    const maxT = avgTimes.length > 0 ? Math.max(...avgTimes) : 0;
+
+    let html = '';
+    KEYBOARD_ROWS.forEach(row => {
+      html += '<div class="kb-row">';
+      row.forEach(key => {
+        const s = keyStats[key];
+        let bg = '#eee';
+        let missBadge = '';
+        if (s) {
+          const avgTime = s.timeCount > 0 ? s.timeSum / s.timeCount : null;
+          bg = timeToColor(avgTime, minT, maxT);
+          if (s.missCount > 0) missBadge = `<span class="kb-miss-badge">${s.missCount}</span>`;
+        }
+        const highlightClass = (key === nextExpectedKey) ? ' next-highlight' : '';
+        html += `<div class="kb-key${highlightClass}" id="kb-key-${key}" style="background-color:${bg};">${escapeHTML(key)}${missBadge}</div>`;
+      });
+      html += '</div>';
+    });
+    container.innerHTML = html;
+  }
+
+  function setInputMode(isEnglish) {
+      if (isEnglishMode === isEnglish) return;
+      isEnglishMode = isEnglish;
+  }
+
+  window.toggleInputMode = function() {
+      setInputMode(!isEnglishMode);
+      const activeInput = document.querySelector('.real-input:focus') || document.querySelector('.real-input') || document.getElementById('game-real-input');
+      if (activeInput) activeInput.focus();
+  };
+
+  let shiftRightDownTime = 0;
+  let shiftRightModifierUsed = false;
+
+  function handleShiftTapDown(e) {
+      if (e.code === 'ShiftRight') {
+          shiftRightDownTime = performance.now();
+          shiftRightModifierUsed = false;
+      } else if (e.shiftKey) {
+          shiftRightModifierUsed = true;
+      }
+  }
+
+  function handleShiftTapUp(e) {
+      if (e.code === 'ShiftRight') {
+          const heldTime = performance.now() - shiftRightDownTime;
+          if (!shiftRightModifierUsed && heldTime < 400) {
+              setInputMode(true);
+          }
+      }
+  }
+
+  function checkModeSwitchKeys(e) {
+      if (e.code === 'NonConvert' || e.key === 'NonConvert' || e.keyCode === 29) {
+          e.preventDefault();
+          setInputMode(true);
+          return true;
+      }
+      if (e.code === 'Convert' || e.key === 'Convert' || e.keyCode === 28) {
+          e.preventDefault();
+          setInputMode(false);
+          return true;
+      }
+      return false;
+  }
+
+  async function initApp() {
+    try {
+      const pathCandidates = [
+        { r: 'data/romantable.txt', c: 'data/course.json' },
+        { r: '../data/romantable.txt', c: '../data/course.json' },
+        { r: '/hana-saku-words/data/romantable.txt', c: '/hana-saku-words/data/course.json' }
+      ];
+
+      let romanRes = null, courseRes = null;
+      let isFound = false;
+
+      for (let paths of pathCandidates) {
+        try {
+          let r = await fetch(paths.r);
+          let c = await fetch(paths.c);
+          if (r.ok && c.ok) {
+            romanRes = r;
+            courseRes = c;
+            isFound = true;
+            console.log("✅ データを次のパスから読み込みました: " + paths.r);
+            break;
+          }
+        } catch (e) {}
+      }
+
+      if (!isFound) {
+        throw new Error("ファイルが見つかりません(404エラー)。");
+      }
+
+      const romanText = await romanRes.text();
+      romanText.split('\n').forEach(line => {
+        line = line.trim();
+        if (!line) return;
+        const parts = line.split(/[\t ]+/);
+        if (parts.length >= 2) {
+          const key = parts[0];
+          const val = parts[parts.length - 1];
+          if (key && val) customKeyMap[key] = val;
+        }
+      });
+      
+      initSearchCaches();
+
+      courseData = await courseRes.json();
+      buildDropdown();
+      if (courseSelect.options.length > 0) loadCourse(courseSelect.options[0].value);
+      
+    } catch (error) {
+      console.error(error);
+      alert("⚠️ データ読み込みエラー\n\n" + error.message);
+    }
+  }
+
+  function parseAozora(line) {
+    const regex = /(?:[｜|]([^《]+)《([^》]+)》)|([\u4E00-\u9FFF\u3005\u3007]+)《([^》]+)》/g;
+    let tokens = [];
+    let lastIndex = 0;
+    let match;
+    
+    while ((match = regex.exec(line)) !== null) {
+      if (match.index > lastIndex) {
+        const preText = line.substring(lastIndex, match.index);
+        for (const char of preText) tokens.push({ type: 'char', char: char, target: char });
+      }
+      const base = match[1] || match[3];
+      const ruby = match[2] || match[4];
+      tokens.push({ type: 'ruby', base: base, ruby: ruby, target: ruby });
+      lastIndex = regex.lastIndex;
+    }
+    if (lastIndex < line.length) {
+      const postText = line.substring(lastIndex);
+      for (const char of postText) tokens.push({ type: 'char', char: char, target: char });
+    }
+    return tokens;
+  }
+
+  function escapeHTML(str) {
+    return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+
+  function buildDropdown() {
+    courseSelect.innerHTML = '';
+    for (const courseName in courseData) {
+      const option = document.createElement('option');
+      option.value = courseName;
+      option.textContent = courseName;
+      courseSelect.appendChild(option);
+    }
+  }
+
+  const hiraToKata = (str) => {
+    if (!str) return "";
+    return str.replace(/[\u3041-\u3096]/g, match => String.fromCharCode(match.charCodeAt(0) + 0x60));
+  };
+
+  function applyCustomIME(inputStr) {
+    let result = "";
+    for (let i = 0; i < inputStr.length; i++) {
+      result += inputStr[i];
+      for (let len = 6; len >= 1; len--) {
+        if (result.length >= len) {
+          let suffix = result.slice(-len);
+          if (customKeyMap[suffix]) {
+            result = result.slice(0, -len) + customKeyMap[suffix];
+            break;
+          }
+        }
+      }
+    }
+    return result;
+  }
+
+  function startTimer() {
+    startTime = Date.now();
+    clearInterval(timerInterval);
+    timerInterval = setInterval(() => {
+      const elapsed = (Date.now() - startTime) / 1000;
+      timeSpan.textContent = elapsed.toFixed(1) + 's';
+      if (elapsed > 0) kpmSpan.textContent = Math.round(totalChars / (elapsed / 60));
+      updateStatsPanel(elapsed);
+      renderHeatmap();
+      renderMistakeList();
+    }, 100);
+  }
+
+  folderInput.addEventListener('change', async (e) => {
+    const files = e.target.files;
+    let addedCount = 0;
+    for (const file of files) {
+      if (file.name.endsWith('.txt')) {
+        const text = await file.text();
+        const lines = text.split(/\r?\n/).filter(line => line.trim() !== '');
+        if (lines.length > 0) {
+          courseData[file.name] = lines;
+          addedCount++;
+        }
+      }
+    }
+    if (addedCount > 0) {
+      buildDropdown();
+      alert(`${addedCount} 件のテキストファイルを読み込みました！`);
+      courseSelect.selectedIndex = courseSelect.options.length - 1;
+      loadCourse(courseSelect.value);
+      settingsPanel.style.display = 'none';
+    }
+  });
+
+  toggleBtn.addEventListener('click', () => {
+    settingsPanel.style.display = settingsPanel.style.display === 'block' ? 'none' : 'block';
+  });
+
+  courseSelect.addEventListener('change', () => {
+    loadCourse(courseSelect.value);
+    settingsPanel.style.display = 'none';
+  });
+
+  function loadCourse(courseName) {
+    const rawLines = courseData[courseName];
+    parsedCourse = rawLines.map(line => {
+      const tokens = parseAozora(line);
+      const targetLine = tokens.map(t => t.target).join('');
+      return { rawLine: line, tokens, targetLine };
+    });
+
+    if (courseName.includes("ゲーム")) {
+      isGameMode = true;
+      document.getElementById('text-container').style.display = 'none';
+      document.getElementById('game-board').style.display = 'block';
+      startGame(parsedCourse);
+    } else {
+      isGameMode = false;
+      document.getElementById('text-container').style.display = 'block';
+      document.getElementById('game-board').style.display = 'none';
+      
+      currentIndex = 0;
+      totalChars = 0;
+      startTime = null;
+      clearInterval(timerInterval);
+      clearInterval(gameInterval);
+      resetSessionStats();
+      
+      timeSpan.textContent = '0.0s';
+      kpmSpan.textContent = '0';
+      
+      textContainer.innerHTML = '';
+      parsedCourse.forEach((parsed, index) => {
+        const blockDiv = document.createElement('div');
+        blockDiv.className = 'line-block';
+        blockDiv.id = `block-${index}`;
+        
+        const inputDiv = document.createElement('div');
+        inputDiv.className = 'input-space';
+        
+        blockDiv.appendChild(inputDiv);
+        textContainer.appendChild(blockDiv);
+      });
+      
+      renderLines();
+    }
+  }
+
+  function startGame(wordsArray) {
+    gameWordsPool = [...wordsArray].sort(() => Math.random() - 0.5);
+    gameScore = 0;
+    gameTimer = 60.0;
+    totalChars = 0;
+    startTime = Date.now();
+    resetSessionStats();
+    
+    document.getElementById('game-score-val').innerText = gameScore;
+    document.getElementById('game-time-text').innerText = gameTimer.toFixed(1);
+    
+    const inputField = document.getElementById('game-real-input');
+    inputField.style.display = 'block';
+    
+    clearInterval(timerInterval);
+    clearInterval(gameInterval);
+    gameInterval = setInterval(() => {
+      let elapsed = (Date.now() - startTime) / 1000;
+      gameTimer = Math.max(0, 60.0 - elapsed);
+      
+      document.getElementById('game-time-text').innerText = gameTimer.toFixed(1);
+      document.getElementById('game-timer-fill').style.width = (gameTimer / 60 * 100) + '%';
+      
+      timeSpan.textContent = elapsed.toFixed(1) + 's';
+      if(elapsed > 0) kpmSpan.textContent = Math.round(totalChars / (elapsed / 60));
+      updateStatsPanel(elapsed);
+      renderHeatmap();
+      renderMistakeList();
+
+      if (gameTimer <= 0) {
+          endGame();
+      }
+    }, 100);
+
+    nextGameWord();
+  }
+
+  function nextGameWord() {
+    if (gameWordsPool.length === 0) {
+        gameWordsPool = [...parsedCourse].sort(() => Math.random() - 0.5);
+    }
+    currentWordObj = gameWordsPool.pop();
+    gameInputValue = '';
+    
+    const visualWrapper = document.getElementById('game-visual-wrapper');
+    visualWrapper.classList.remove('pop-anim');
+    void visualWrapper.offsetWidth; 
+    
+    updateGameVisuals('');
+    document.getElementById('game-real-input').focus();
+  }
+
+  function updateGameVisuals(val) {
+    if(!currentWordObj) return;
+
+    let targetReading = currentWordObj.tokens.map(t => t.target).join('');
+    
+    let adjustedVal = "";
+    for (let i = 0; i < val.length; i++) {
+        let typedChar = val[i];
+        let targetChar = targetReading[i];
+        if (targetChar && hiraToKata(typedChar) === targetChar) {
+            typedChar = targetChar;
+        }
+        adjustedVal += typedChar;
+    }
+
+    let matchLen = 0;
+    for (let i = 0; i < adjustedVal.length; i++) {
+        if (adjustedVal[i] === targetReading[i]) matchLen++;
+        else break;
+    }
+
+    let remainingVal = val;
+    let currentMatch = matchLen;
+    let caretDrawn = false;
+    let html = '<div class="visual-tokens-container" style="justify-content: center;">';
+
+    for (const token of currentWordObj.tokens) {
+        html += '<div class="token-wrapper">';
+        let pLayer = '';
+        let iLayer = '';
+
+        if (currentMatch >= token.target.length) {
+            pLayer = `<span style="visibility:hidden; user-select:none;">${token.type === 'ruby' ? token.base : token.char}</span>`;
+            iLayer = `<span style="color: var(--text-completed); font-weight: bold;">${token.type === 'ruby' ? token.base : token.char}</span>`;
+            currentMatch -= token.target.length;
+            remainingVal = remainingVal.substring(token.target.length);
+        } else if (!caretDrawn) {
+            caretDrawn = true;
+            if (token.type === 'ruby') {
+              const hiddenRuby = token.ruby.substring(0, currentMatch);
+              const remainingRuby = token.ruby.substring(currentMatch);
+              const activeRuby = remainingRuby.substring(0, 1);
+              const futureRuby = remainingRuby.substring(1);
+              pLayer = `<ruby><span style="opacity: 0.8; color: var(--text-completed); font-weight:bold;">${token.base}</span><rt><span style="visibility:hidden">${hiddenRuby}</span><span style="color: var(--text-active-prompt); font-weight:bold;">${activeRuby}</span><span style="color: var(--text-upcoming);">${futureRuby}</span></rt></ruby>`;
+              lastActiveTargetChar = activeRuby || lastActiveTargetChar;
+            } else {
+              const hiddenChar = token.char.substring(0, currentMatch);
+              const remainingChar = token.char.substring(currentMatch);
+              const activeChar = remainingChar.substring(0, 1);
+              const futureChar = remainingChar.substring(1);
+              pLayer = `<span style="visibility:hidden">${hiddenChar}</span><span style="opacity: 1; color: var(--text-active-prompt); font-weight:bold;">${activeChar}</span><span style="color: var(--text-upcoming); font-weight:bold;">${futureChar}</span>`;
+              lastActiveTargetChar = activeChar || lastActiveTargetChar;
+            }
+
+            let typedText = "";
+            let confirmedStr = remainingVal.substring(0, currentMatch);
+            for (let j = 0; j < confirmedStr.length; j++) {
+                let char = confirmedStr[j];
+                let targetChar = targetReading[matchLen - currentMatch + j];
+                if (targetChar && hiraToKata(char) === targetChar) char = targetChar;
+                typedText += char;
+            }
+            typedText = `<span style="color: var(--text-completed); font-weight: bold;">${escapeHTML(typedText)}</span>`;
+            
+            let extra = remainingVal.substring(currentMatch);
+            let frameLastStatus = 'match';
+            
+            let remainingTarget = targetReading.substring(matchLen);
+            let searchResult = findNextKeyAndValidity(extra, remainingTarget);
+            let isValid = searchResult.isValid;
+
+            if (nextExpectedKey) {
+                const prevEl = document.getElementById('kb-key-' + nextExpectedKey);
+                if (prevEl) prevEl.classList.remove('next-highlight');
+            }
+            nextExpectedKey = searchResult.nextKey ? searchResult.nextKey.toLowerCase() : null;
+            if (nextExpectedKey) {
+                const nextEl = document.getElementById('kb-key-' + nextExpectedKey);
+                if (nextEl) nextEl.classList.add('next-highlight');
+            }
+
+            for (let j = 0; j < extra.length; j++) {
+              let char = extra[j];
+              if (isValid) {
+                typedText += `<span class="state">${escapeHTML(char)}</span>`;
+                frameLastStatus = 'state';
+              } else {
+                typedText += `<span class="mistake">${escapeHTML(char)}</span>`;
+                frameLastStatus = 'mistake';
+              }
+            }
+            lastCharStatus = frameLastStatus;
+            
+            if(typedText === "") typedText = `<span style="visibility:hidden;">_</span>`;
+
+            iLayer = `<div style="display: flex; align-items: center;">${typedText}<span class="custom-caret"></span></div>`;
+            remainingVal = "";
+            currentMatch = 0;
+        } else {
+            if (token.type === 'ruby') {
+              pLayer = `<ruby>${token.base}<rt>${token.ruby}</rt></ruby>`;
+            } else {
+              pLayer = `<span>${token.char}</span>`;
+            }
+            iLayer = `<span style="visibility:hidden;">_</span>`;
+        }
+
+        html += `<div class="prompt-layer">${pLayer}</div>`;
+        html += `<div class="input-layer">${iLayer}</div>`;
+        html += '</div>'; 
+    }
+    html += '</div>';
+    
+    document.getElementById('game-visual-wrapper').innerHTML = html;
+  }
+
+  const gameInputEl = document.getElementById('game-real-input');
+
+  gameInputEl.addEventListener('keydown', function(e) {
+    if(gameTimer <= 0) return;
+    handleShiftTapDown(e);
+    if (checkModeSwitchKeys(e)) return;
+
+    if (e.code === 'CapsLock' || e.key === 'Alphanumeric' || e.code === 'Lang2' || e.key === 'Backspace') {
+      e.preventDefault();
+      gameInputValue = gameInputValue.slice(0, -1);
+      recordDeletion();
+      handleGameInputUpdate();
+      return;
+    }
+
+    if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      e.preventDefault();
+      gameInputValue += e.key;
+      handleGameInputUpdate();
+      recordKeystroke(e.key);
+    }
+  });
+
+  gameInputEl.addEventListener('keyup', function(e) {
+    if(gameTimer <= 0) return;
+    checkModeSwitchKeys(e);
+    handleShiftTapUp(e);
+  });
+
+  function handleGameInputUpdate() {
+    let val = gameInputValue;
+    if (!isEnglishMode) {
+      val = applyCustomIME(val);
+    }
+    gameInputValue = val;
+
+    updateGameVisuals(val);
+
+    let targetReading = currentWordObj.tokens.map(t => t.target).join('');
+    let adjustedVal = "";
+    for (let i = 0; i < val.length; i++) {
+        let typedChar = val[i];
+        let targetChar = targetReading[i];
+        if (targetChar && hiraToKata(typedChar) === targetChar) typedChar = targetChar;
+        adjustedVal += typedChar;
+    }
+
+    let matchLen = 0;
+    for (let i = 0; i < adjustedVal.length; i++) {
+        if (adjustedVal[i] === targetReading[i]) matchLen++;
+        else break;
+    }
+
+    if (matchLen === targetReading.length && val.length === targetReading.length) {
+        totalChars += currentWordObj.targetLine.length;
+        const { displayChars, moraCount } = computeLineMetrics(currentWordObj);
+        statsDisplayCharsTotal += displayChars;
+        statsMoraTotal += moraCount;
+        skipNextTimingGap = true;
+        gameScore++;
+        document.getElementById('game-score-val').innerText = gameScore;
+        
+        const visualWrapper = document.getElementById('game-visual-wrapper');
+        visualWrapper.classList.add('pop-anim');
+        
+        setTimeout(() => {
+            nextGameWord();
+        }, 150); 
+    }
+  }
+
+  window.restartGame = function() {
+    startGame(parsedCourse);
+  };
+
+  function endGame() {
+    clearInterval(gameInterval);
+    document.getElementById('game-time-text').innerText = "0.0";
+    
+    const inputField = document.getElementById('game-real-input');
+    inputField.style.display = 'none'; 
+
+    const visualWrapper = document.getElementById('game-visual-wrapper');
+    visualWrapper.classList.remove('pop-anim');
+    visualWrapper.innerHTML = `
+        <div style="text-align:center;">
+            <div style="font-size: 40px; color: var(--text-active-prompt); margin-bottom:20px; font-weight: bold;">終了！</div>
+            <div style="font-size: 24px; color: var(--text-completed);">
+                食べた皿: <strong style="font-size: 32px; color: var(--status-text);">${gameScore}</strong> 皿<br>
+                入力文字数: <strong style="font-size: 32px; color: var(--status-text);">${totalChars}</strong> 文字
+            </div>
+            <button onclick="restartGame()" class="load-btn" style="font-size: 20px; padding: 15px 30px; margin-top: 30px; position:relative; z-index:100;">もう一度プレイ</button>
+        </div>
+    `;
+  }
+
+  function renderLines() {
+    if (currentIndex >= parsedCourse.length) {
+      clearInterval(timerInterval);
+      const clearMsg = document.createElement('div');
+      clearMsg.style.fontSize = '24px';
+      clearMsg.style.marginTop = '40px';
+      clearMsg.style.textAlign = 'center';
+      clearMsg.style.color = 'var(--text-active-prompt)';
+      clearMsg.innerHTML = '✿ 満開になりました。お疲れ様でした！';
+      textContainer.appendChild(clearMsg);
+      updateStatus();
+      return;
+    }
+
+    parsedCourse.forEach((parsed, index) => {
+      const blockDiv = document.getElementById(`block-${index}`);
+      const inputDiv = blockDiv.querySelector('.input-space');
+
+      if (index < currentIndex) {
+        blockDiv.className = 'line-block completed-block';
+        let completedHtml = '<div style="font-size: var(--font-size); color: var(--text-completed); font-weight: bold; line-height: 1.8; margin-top: 10px;">';
+        parsed.tokens.forEach(token => {
+            completedHtml += `<span>${token.type === 'ruby' ? token.base : token.char}</span>`;
+        });
+        completedHtml += '</div>';
+        inputDiv.innerHTML = completedHtml; 
+      } 
+      else if (index === currentIndex) {
+        blockDiv.className = 'line-block';
+
+        if (!inputDiv.querySelector('.real-input')) {
+          inputDiv.innerHTML = `
+            <div tabindex="0" class="real-input"></div>
+            <div class="visual-wrapper" style="position: relative; z-index:1;"></div>
+          `;
+          const inputField = inputDiv.querySelector('.real-input');
+          const visualDiv = inputDiv.querySelector('.visual-wrapper');
+          
+          normalInputValue = ""; 
+          inputField.focus();
+
+          const updateVisuals = (val) => {
+            let targetReading = parsed.tokens.map(t => t.target).join('');
+
+            let adjustedVal = "";
+            for (let i = 0; i < val.length; i++) {
+                let typedChar = val[i];
+                let targetChar = targetReading[i];
+                if (targetChar && hiraToKata(typedChar) === targetChar) {
+                    typedChar = targetChar;
+                }
+                adjustedVal += typedChar;
+            }
+
+            let matchLen = 0;
+            for (let i = 0; i < adjustedVal.length; i++) {
+                if (adjustedVal[i] === targetReading[i]) matchLen++;
+                else break;
+            }
+
+            let remainingVal = val;
+            let currentMatch = matchLen;
+            let caretDrawn = false;
+
+            let html = '<div class="visual-tokens-container">';
+
+            for (const token of parsed.tokens) {
+              html += '<div class="token-wrapper">';
+              
+              let pLayer = '';
+              let iLayer = '';
+
+              if (currentMatch >= token.target.length) {
+                pLayer = `<ruby style="visibility:hidden; user-select:none;">${token.type === 'ruby' ? token.base : token.char}<rt>_</rt></ruby>`;
+                iLayer = `<span style="color: var(--text-completed); font-weight: bold;">${token.type === 'ruby' ? token.base : token.char}</span>`;
+                currentMatch -= token.target.length;
+                remainingVal = remainingVal.substring(token.target.length);
+              } else if (!caretDrawn) {
+                caretDrawn = true;
+                
+                if (token.type === 'ruby') {
+                  const hiddenRuby = token.ruby.substring(0, currentMatch);
+                  const remainingRuby = token.ruby.substring(currentMatch);
+                  const activeRuby = remainingRuby.substring(0, 1);
+                  const futureRuby = remainingRuby.substring(1);
+                  pLayer = `<ruby><span style="opacity: 0.8; color: var(--text-completed); font-weight:bold;">${token.base}</span><rt><span style="visibility:hidden">${hiddenRuby}</span><span style="color: var(--text-active-prompt); font-weight:bold;">${activeRuby}</span><span style="color: var(--text-upcoming);">${futureRuby}</span></rt></ruby>`;
+                  lastActiveTargetChar = activeRuby || lastActiveTargetChar;
+                } else {
+                  const hiddenChar = token.char.substring(0, currentMatch);
+                  const remainingChar = token.char.substring(currentMatch);
+                  const activeChar = remainingChar.substring(0, 1);
+                  const futureChar = remainingChar.substring(1);
+                  pLayer = `<ruby><span style="visibility:hidden">${hiddenChar}</span><span style="opacity: 1; color: var(--text-active-prompt); font-weight:bold;">${activeChar}</span><span style="color: var(--text-upcoming); font-weight:bold;">${futureChar}</span><rt style="visibility:hidden">_</rt></ruby>`;
+                  lastActiveTargetChar = activeChar || lastActiveTargetChar;
+                }
+
+                let typedText = "";
+                let confirmedStr = remainingVal.substring(0, currentMatch);
+                for (let j = 0; j < confirmedStr.length; j++) {
+                    let char = confirmedStr[j];
+                    let targetChar = targetReading[matchLen - currentMatch + j];
+                    if (targetChar && hiraToKata(char) === targetChar) char = targetChar;
+                    typedText += char;
+                }
+                typedText = `<span style="color: var(--text-completed); font-weight: bold;">${escapeHTML(typedText)}</span>`;
+                
+                let extra = remainingVal.substring(currentMatch);
+                let frameLastStatus = 'match';
+                
+                let remainingTarget = targetReading.substring(matchLen);
+                let searchResult = findNextKeyAndValidity(extra, remainingTarget);
+                let isValid = searchResult.isValid;
+
+                if (nextExpectedKey) {
+                    const prevEl = document.getElementById('kb-key-' + nextExpectedKey);
+                    if (prevEl) prevEl.classList.remove('next-highlight');
+                }
+                nextExpectedKey = searchResult.nextKey ? searchResult.nextKey.toLowerCase() : null;
+                if (nextExpectedKey) {
+                    const nextEl = document.getElementById('kb-key-' + nextExpectedKey);
+                    if (nextEl) nextEl.classList.add('next-highlight');
+                }
+
+                for (let j = 0; j < extra.length; j++) {
+                  let char = extra[j];
+                  if (isValid) {
+                    typedText += `<span class="state">${escapeHTML(char)}</span>`;
+                    frameLastStatus = 'state';
+                  } else {
+                    typedText += `<span class="mistake">${escapeHTML(char)}</span>`;
+                    frameLastStatus = 'mistake';
+                  }
+                }
+                lastCharStatus = frameLastStatus;
+                
+                if(typedText === "") typedText = `<span style="visibility:hidden;">_</span>`;
+
+                iLayer = `<div style="display: flex; align-items: center;">${typedText}<span class="custom-caret"></span></div>`;
+                remainingVal = "";
+                currentMatch = 0;
+              } else {
+                if (token.type === 'ruby') {
+                  pLayer = `<ruby>${token.base}<rt>${token.ruby}</rt></ruby>`;
+                } else {
+                  pLayer = `<ruby>${token.char}<rt style="visibility:hidden">_</rt></ruby>`;
+                }
+                iLayer = `<span style="visibility:hidden;">_</span>`;
+              }
+
+              html += `<div class="prompt-layer">${pLayer}</div>`;
+              html += `<div class="input-layer">${iLayer}</div>`;
+              html += '</div>'; 
+            }
+
+            html += '</div>'; 
+            visualDiv.innerHTML = html;
+          };
+
+          const checkInput = () => {
+            if (!startTime) startTimer();
+            
+            let val = normalInputValue;
+            if (!isEnglishMode) {
+              val = applyCustomIME(val);
+            }
+            normalInputValue = val;
+
+            updateVisuals(val); 
+
+            let targetReading = parsed.tokens.map(t => t.target).join('');
+            let adjustedVal = "";
+            for (let i = 0; i < val.length; i++) {
+                let typedChar = val[i];
+                let targetChar = targetReading[i];
+                if (targetChar && hiraToKata(typedChar) === targetChar) typedChar = targetChar;
+                adjustedVal += typedChar;
+            }
+
+            let matchLen = 0;
+            for (let i = 0; i < adjustedVal.length; i++) {
+                if (adjustedVal[i] === targetReading[i]) matchLen++;
+                else break;
+            }
+
+            if (matchLen === targetReading.length && val.length === targetReading.length) {
+              totalChars += parsed.targetLine.length;
+              const { displayChars, moraCount } = computeLineMetrics(parsed);
+              statsDisplayCharsTotal += displayChars;
+              statsMoraTotal += moraCount;
+              skipNextTimingGap = true; 
+              currentIndex++;
+              renderLines();
+              
+              const nextBlock = document.getElementById(`block-${currentIndex}`);
+              if (nextBlock) {
+                 nextBlock.scrollIntoView({ behavior: 'smooth', block: 'center' });
+              }
+            }
+          };
+
+          inputField.addEventListener('keydown', (e) => {
+            handleShiftTapDown(e);
+            if (checkModeSwitchKeys(e)) return;
+
+            if (e.code === 'CapsLock' || e.key === 'Alphanumeric' || e.code === 'Lang2' || e.key === 'Backspace') {
+              e.preventDefault();
+              normalInputValue = normalInputValue.slice(0, -1);
+              recordDeletion();
+              checkInput();
+              return;
+            }
+
+            if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
+              e.preventDefault();
+              normalInputValue += e.key;
+              checkInput();
+              recordKeystroke(e.key);
+            }
+          });
+
+          inputField.addEventListener('keyup', (e) => {
+            checkModeSwitchKeys(e);
+            handleShiftTapUp(e);
+          });
+
+          updateVisuals(normalInputValue); 
+
+        } else {
+          inputDiv.querySelector('.real-input').focus();
+        }
+      } 
+      else {
+        blockDiv.className = 'line-block';
+        let futureHtml = '<div class="visual-tokens-container">';
+        parsed.tokens.forEach(token => {
+            futureHtml += '<div class="token-wrapper">';
+            let pLayer = '';
+            if(token.type === 'ruby') {
+                pLayer = `<ruby>${token.base}<rt>${token.ruby}</rt></ruby>`;
+            } else {
+                pLayer = `<ruby>${token.char}<rt style="visibility:hidden">_</rt></ruby>`;
+            }
+            futureHtml += `<div class="prompt-layer">${pLayer}</div>`;
+            futureHtml += `<div class="input-layer"><span style="visibility:hidden;">_</span></div>`;
+            futureHtml += '</div>';
+        });
+        futureHtml += '</div>';
+        inputDiv.innerHTML = futureHtml;
+      }
+    });
+
+    updateStatus();
+  }
+
+  function updateStatus() {
+    if(parsedCourse && parsedCourse.length > 0) {
+        progressSpan.textContent = `${currentIndex} / ${parsedCourse.length}`;
+    }
+  }
+
+  document.addEventListener('click', (e) => {
+    if (e.target.closest('#toggle-settings') || e.target.closest('#settings-panel') || e.target.closest('.load-btn')) return;
+    
+    if (isGameMode) {
+       const gameInput = document.getElementById('game-real-input');
+       if(gameInput && gameInput.style.display !== 'none') gameInput.focus();
+    } else {
+       const activeInput = document.querySelector('#text-container .real-input');
+       if (activeInput) activeInput.focus();
+    }
+  });
+
+  initApp();
+
+</script>
+
+</body>
+</html>
