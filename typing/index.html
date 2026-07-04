@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>花咲く言葉 (HSW配列) - タイピングプラクティス v28.07</title>
+<title>花咲く言葉 (HSW配列) - タイピングプラクティス v28.08</title>
 <style>
   :root {
     --bg-color: #fcfbf9; 
@@ -325,7 +325,7 @@
 <body>
 
 <div class="header">
-  <h2>✿ 花咲く言葉 - タイピングの庭 v28.07</h2>
+  <h2>✿ 花咲く言葉 - タイピングの庭 v28.08</h2>
   <button class="settings-btn" id="toggle-settings" title="設定・コース選択">⚙️</button>
 </div>
 
@@ -423,6 +423,7 @@
   let gameWordsPool = [];
   let currentWordObj = null;
 
+  let isEnglishMode = false;
   let normalInputValue = "";
   let gameInputValue = "";
 
@@ -442,18 +443,17 @@
   let skipNextTimingGap = true;
   let nextExpectedKey = null;
 
-// ============================================================
-  // ★ 完全版：総当たりを排除した超軽量「辞書逆引き」アルゴリズム
+  // ============================================================
+  // ★ 完全版：BFSを排除した軽量な「辞書逆引き」アルゴリズム
   // ============================================================
   let validPathsForKana = {}; 
   let validKeyChars = [];
-  let validMapPrefixes = new Set(); 
+  let validMapPrefixes = new Set();
 
   function initSearchCaches() {
       validMapPrefixes.clear();
       let physicalKeys = new Set();
       
-      // 1. 物理キーとプレフィックスの抽出
       for (let k in customKeyMap) {
           if (k.length === 1 && !/[ァ-ヶぁ-ん]/.test(k)) {
               physicalKeys.add(k.toLowerCase());
@@ -466,21 +466,19 @@
       validKeyChars = Array.from(physicalKeys);
       
       validPathsForKana = {};
-      
-      // 2. customKeyMapを「直前の状態」と「打ったキー」に分解し、状態遷移マップを作る
       let transitionMap = {};
+      
       for (let k in customKeyMap) {
           let val = customKeyMap[k];
-          let prefix = k.slice(0, -1); // 直前の状態（例：「カa」なら「カ」）
-          let trigger = k.slice(-1);   // 打ったキー（例：「カa」なら「a」）
-
+          let prefix = k.slice(0, -1);
+          let trigger = k.slice(-1);
           if (!transitionMap[prefix]) transitionMap[prefix] = [];
           transitionMap[prefix].push({ trigger: trigger, result: val });
       }
 
-      // 3. グラフ探索（DFS）で、初期状態（空）から全ルートを一瞬で割り出す
+      // グラフ探索（DFS）で、初期状態から全ルートを一瞬で割り出す
       function dfs(currentState, currentRawPath, visitedStates) {
-          if (currentRawPath.length >= 6) return; // 念のための深さ制限
+          if (currentRawPath.length >= 6) return;
 
           let transitions = transitionMap[currentState];
           if (transitions) {
@@ -488,12 +486,10 @@
                   let nextState = t.result;
                   let nextRawPath = currentRawPath + t.trigger;
                   
-                  // 同じ状態を繰り返す無駄なループ（例: ァq -> ァ）を枝刈りして無限ループを防止
                   if (visitedStates.has(nextState)) continue;
 
                   let isUnfinished = /[ァ-ヶ]/.test(nextState) && nextState !== 'ー' && nextState !== 'ヴ';
                   
-                  // かな（確定文字）に到達したら辞書に登録
                   if (!isUnfinished && nextState.length > 0) {
                       let norm = normalizeForMatch(nextState);
                       if (!validPathsForKana[norm]) validPathsForKana[norm] = [];
@@ -507,10 +503,8 @@
           }
       }
 
-      // 探索スタート
       dfs("", "", new Set([""]));
 
-      // 4. 直接定義されている記号などの単発ルートも補完
       for (let k in customKeyMap) {
           let val = customKeyMap[k];
           let isUnfinished = /[ァ-ヶ]/.test(val) && val !== 'ー' && val !== 'ヴ';
@@ -523,14 +517,15 @@
           }
       }
   }
-  
+
+  // 入力中にO(1)で即座に「ルートの正当性」と「次キー」を割り出す
   function getNextKeyInfo(unconfirmedRaw, remainingTarget) {
       if (remainingTarget.length === 0) return { isValid: true, nextKey: null };
       
       let possiblePaths = [];
-      // ターゲットの先頭1〜3文字（きゃ等）が辞書にあるか確認
+      // ターゲットの先頭1〜3文字（きゃ等）の辞書をチェック
       for (let len = 1; len <= Math.min(3, remainingTarget.length); len++) {
-          let chunk = remainingTarget.substring(0, len);
+          let chunk = normalizeForMatch(remainingTarget.substring(0, len));
           if (validPathsForKana[chunk]) {
               possiblePaths.push(...validPathsForKana[chunk]);
           }
@@ -538,20 +533,23 @@
       
       if (possiblePaths.length === 0) return { isValid: false, nextKey: null };
       
-      let isValid = false;
-      let nextKey = null;
+      // 生の物理キー入力が、正解ルート文字列の「前方一致」になっているものを抽出
+      let matchingPaths = possiblePaths.filter(p => p.startsWith(unconfirmedRaw));
       
-      // 生の物理キー入力が、正解ルート文字列の「前方一致」になっているかだけを調べる
-      for (let path of possiblePaths) {
-          if (path.startsWith(unconfirmedRaw)) {
-              isValid = true;
-              if (path.length > unconfirmedRaw.length) {
-                  nextKey = path[unconfirmedRaw.length];
-              }
-              break; 
-          }
+      if (matchingPaths.length === 0) {
+          return { isValid: false, nextKey: null };
       }
-      return { isValid, nextKey };
+      
+      // 一致したパスの中で最も短いもの（最短リカバリーまたは最短入力）を案内する
+      matchingPaths.sort((a, b) => a.length - b.length);
+      
+      let bestPath = matchingPaths[0];
+      let nextKey = null;
+      if (bestPath.length > unconfirmedRaw.length) {
+          nextKey = bestPath[unconfirmedRaw.length];
+      }
+      
+      return { isValid: true, nextKey: nextKey };
   }
 
   function resetSessionStats() {
@@ -753,6 +751,46 @@
     container.innerHTML = html;
   }
 
+  function setInputMode(isEnglish) {
+      if (isEnglishMode === isEnglish) return;
+      isEnglishMode = isEnglish;
+  }
+
+  let shiftRightDownTime = 0;
+  let shiftRightModifierUsed = false;
+
+  function handleShiftTapDown(e) {
+      if (e.code === 'ShiftRight') {
+          shiftRightDownTime = performance.now();
+          shiftRightModifierUsed = false;
+      } else if (e.shiftKey) {
+          shiftRightModifierUsed = true;
+      }
+  }
+
+  function handleShiftTapUp(e) {
+      if (e.code === 'ShiftRight') {
+          const heldTime = performance.now() - shiftRightDownTime;
+          if (!shiftRightModifierUsed && heldTime < 400) {
+              setInputMode(true);
+          }
+      }
+  }
+
+  function checkModeSwitchKeys(e) {
+      if (e.code === 'NonConvert' || e.key === 'NonConvert' || e.keyCode === 29) {
+          e.preventDefault();
+          setInputMode(true);
+          return true;
+      }
+      if (e.code === 'Convert' || e.key === 'Convert' || e.keyCode === 28) {
+          e.preventDefault();
+          setInputMode(false);
+          return true;
+      }
+      return false;
+  }
+
   async function initApp() {
     try {
       const pathCandidates = [
@@ -794,7 +832,7 @@
         }
       });
       
-      initSearchCaches(); // ★ 起動時に辞書キャッシュ準備
+      initSearchCaches(); // ★ 起動時に全ルートの辞書を生成
 
       courseData = await courseRes.json();
       buildDropdown();
@@ -926,10 +964,12 @@
     });
 
     if (courseName.includes("ゲーム")) {
+      isGameMode = true;
       document.getElementById('text-container').style.display = 'none';
       document.getElementById('game-board').style.display = 'block';
       startGame(parsedCourse);
     } else {
+      isGameMode = false;
       document.getElementById('text-container').style.display = 'block';
       document.getElementById('game-board').style.display = 'none';
       
@@ -1008,17 +1048,16 @@
     visualWrapper.classList.remove('pop-anim');
     void visualWrapper.offsetWidth; 
     
-    updateGameVisuals(gameInputValue, currentWordObj);
+    updateGameVisuals('', currentWordObj);
     document.getElementById('game-real-input').focus();
   }
 
-  // ★ 統合された描画・次キー推測エンジン
+  // ★ 統合された描画・次キー推測エンジン（完全逆引き対応版）
   function updateGameVisuals(rawVal, wordObj) {
     if(!wordObj) return;
 
     let targetReading = wordObj.tokens.map(t => t.target).join('');
     
-    // 生の物理キー入力から、「確定済みの長さ」を割り出す
     let confirmedRawLen = 0;
     let confirmedHiraLen = 0;
     let step = 1;
@@ -1051,14 +1090,14 @@
         if (prevEl) prevEl.classList.remove('next-highlight');
     }
 
+    // ★ 無効キー・CapsLockの制御
     if (!isValidRoute) {
         if (unconfirmedRaw.length > 0) {
-            let lastChar = unconfirmedRaw.slice(-1);
-            // そもそも配列として無効なキーか判定
-            if (!validKeyChars.includes(lastChar)) {
-                nextExpectedKey = null; // 無反応
+            // 配列に定義されていない無関係なキー（z等）なら無反応
+            if (!validMapPrefixes.has(unconfirmedRaw) && unconfirmedRaw.length === 1) {
+                nextExpectedKey = null; 
             } else {
-                nextExpectedKey = 'capslock'; // リカバリー不能ミス
+                nextExpectedKey = 'capslock'; // 回復不能なミス
             }
         }
     } else {
@@ -1070,10 +1109,9 @@
         if (nextEl) nextEl.classList.add('next-highlight');
     }
 
-    // 画面表示用に未確定部分をIME変換
     let evalUnconfirmed = applyCustomIME(unconfirmedRaw);
     let currentMatch = confirmedHiraLen;
-    let remainingVal = evalUnconfirmed; // IME適用済みの未確定文字列
+    let remainingVal = evalUnconfirmed; 
     let caretDrawn = false;
     
     let html = '<div class="visual-tokens-container" style="justify-content: center;">';
@@ -1141,12 +1179,18 @@
     }
     html += '</div>';
     
-    document.getElementById(wordObj === currentWordObj ? 'game-visual-wrapper' : 'game-visual-wrapper').innerHTML = html;
+    // Game mode vs Normal mode DOM update
+    let targetEl = document.getElementById(isGameMode ? 'game-visual-wrapper' : 'visual-wrapper');
+    if(targetEl) targetEl.innerHTML = html;
   }
 
   const gameInputEl = document.getElementById('game-real-input');
 
   gameInputEl.addEventListener('keydown', function(e) {
+    if(gameTimer <= 0) return;
+    handleShiftTapDown(e);
+    if (checkModeSwitchKeys(e)) return;
+
     if (e.code === 'CapsLock' || e.key === 'Alphanumeric' || e.code === 'Lang2' || e.key === 'Backspace') {
       e.preventDefault();
       gameInputValue = gameInputValue.slice(0, -1);
@@ -1163,11 +1207,22 @@
     }
   });
 
+  gameInputEl.addEventListener('keyup', function(e) {
+    if(gameTimer <= 0) return;
+    checkModeSwitchKeys(e);
+    handleShiftTapUp(e);
+  });
+
   function handleGameInputUpdate() {
-    updateGameVisuals(gameInputValue, currentWordObj);
+    let val = gameInputValue;
+    if (!isEnglishMode) {
+      val = applyCustomIME(val);
+    }
+    gameInputValue = val;
+
+    updateGameVisuals(val, currentWordObj);
 
     let targetReading = currentWordObj.tokens.map(t => t.target).join('');
-    
     let confirmedRawLen = 0;
     let confirmedHiraLen = 0;
     let step = 1;
@@ -1262,143 +1317,23 @@
         if (!inputDiv.querySelector('.real-input')) {
           inputDiv.innerHTML = `
             <div tabindex="0" class="real-input"></div>
-            <div class="visual-wrapper" style="position: relative; z-index:1;"></div>
+            <div class="visual-wrapper" id="visual-wrapper" style="position: relative; z-index:1;"></div>
           `;
           const inputField = inputDiv.querySelector('.real-input');
-          const visualDiv = inputDiv.querySelector('.visual-wrapper');
           
           normalInputValue = ""; 
           inputField.focus();
 
-          const updateVisualsText = (rawVal) => {
-            let targetReading = parsed.tokens.map(t => t.target).join('');
-            
-            let confirmedRawLen = 0;
-            let confirmedHiraLen = 0;
-            let step = 1;
-            while (step <= rawVal.length) {
-                let testRaw = rawVal.substring(confirmedRawLen, step);
-                let evalStr = applyCustomIME(testRaw);
-                
-                let hasUnfinishedKatakana = /[ァ-ヶ]/.test(evalStr) && evalStr !== 'ー' && evalStr !== 'ヴ';
-                if (!hasUnfinishedKatakana) {
-                    let normEval = normalizeForMatch(evalStr);
-                    let remTarget = targetReading.substring(confirmedHiraLen);
-                    if (normEval.length > 0 && remTarget.startsWith(normEval)) {
-                        confirmedRawLen = step;
-                        confirmedHiraLen += normEval.length;
-                        continue;
-                    }
-                }
-                step++;
-            }
-
-            let unconfirmedRaw = rawVal.substring(confirmedRawLen);
-            let remainingTargetForKeys = targetReading.substring(confirmedHiraLen);
-            
-            let keyInfo = getNextKeyInfo(unconfirmedRaw, remainingTargetForKeys);
-            let isValidRoute = keyInfo.isValid;
-            
-            if (nextExpectedKey) {
-                const prevEl = document.getElementById('kb-key-' + nextExpectedKey);
-                if (prevEl) prevEl.classList.remove('next-highlight');
-            }
-
-            if (!isValidRoute) {
-                if (unconfirmedRaw.length > 0) {
-                    let lastChar = unconfirmedRaw.slice(-1);
-                    if (!validKeyChars.includes(lastChar)) {
-                        nextExpectedKey = null; 
-                    } else {
-                        nextExpectedKey = 'capslock'; 
-                    }
-                }
-            } else {
-                nextExpectedKey = keyInfo.nextKey ? keyInfo.nextKey.toLowerCase() : null;
-            }
-
-            if (nextExpectedKey) {
-                const nextEl = document.getElementById('kb-key-' + nextExpectedKey);
-                if (nextEl) nextEl.classList.add('next-highlight');
-            }
-
-            let evalUnconfirmed = applyCustomIME(unconfirmedRaw);
-            let currentMatch = confirmedHiraLen;
-            let remainingVal = evalUnconfirmed; 
-            let caretDrawn = false;
-            
-            let html = '<div class="visual-tokens-container">';
-
-            for (const token of parsed.tokens) {
-              html += '<div class="token-wrapper">';
-              let pLayer = '';
-              let iLayer = '';
-
-              if (currentMatch >= token.target.length) {
-                pLayer = `<ruby style="visibility:hidden; user-select:none;">${token.type === 'ruby' ? token.base : token.char}<rt>_</rt></ruby>`;
-                iLayer = `<span style="color: var(--text-completed); font-weight: bold;">${token.type === 'ruby' ? token.base : token.char}</span>`;
-                currentMatch -= token.target.length;
-              } else if (!caretDrawn) {
-                caretDrawn = true;
-                if (token.type === 'ruby') {
-                  const hiddenRuby = token.ruby.substring(0, currentMatch);
-                  const remRuby = token.ruby.substring(currentMatch);
-                  const activeRuby = remRuby.substring(0, 1);
-                  const futureRuby = remRuby.substring(1);
-                  pLayer = `<ruby><span style="opacity: 0.8; color: var(--text-completed); font-weight:bold;">${token.base}</span><rt><span style="visibility:hidden">${hiddenRuby}</span><span style="color: var(--text-active-prompt); font-weight:bold;">${activeRuby}</span><span style="color: var(--text-upcoming);">${futureRuby}</span></rt></ruby>`;
-                  lastActiveTargetChar = activeRuby || lastActiveTargetChar;
-                } else {
-                  const hiddenChar = token.char.substring(0, currentMatch);
-                  const remChar = token.char.substring(currentMatch);
-                  const activeChar = remChar.substring(0, 1);
-                  const futureChar = remChar.substring(1);
-                  pLayer = `<span style="visibility:hidden">${hiddenChar}</span><span style="opacity: 1; color: var(--text-active-prompt); font-weight:bold;">${activeChar}</span><span style="color: var(--text-upcoming); font-weight:bold;">${futureChar}</span>`;
-                  lastActiveTargetChar = activeChar || lastActiveTargetChar;
-                }
-
-                let typedText = "";
-                let frameLastStatus = 'match';
-                for (let j = 0; j < remainingVal.length; j++) {
-                  let char = remainingVal[j];
-                  let targetChar = targetReading[confirmedHiraLen + j];
-                  if (targetChar && hiraToKata(char) === targetChar) char = targetChar;
-                  
-                  if (isValidRoute) {
-                    typedText += `<span class="state">${escapeHTML(char)}</span>`;
-                    frameLastStatus = 'state';
-                  } else {
-                    typedText += `<span class="mistake">${escapeHTML(char)}</span>`;
-                    frameLastStatus = 'mistake';
-                  }
-                }
-                lastCharStatus = frameLastStatus;
-                
-                if(typedText === "") typedText = `<span style="visibility:hidden;">_</span>`;
-
-                iLayer = `<div style="display: flex; align-items: center;">${typedText}<span class="custom-caret"></span></div>`;
-                currentMatch = 0;
-              } else {
-                if (token.type === 'ruby') {
-                  pLayer = `<ruby>${token.base}<rt>${token.ruby}</rt></ruby>`;
-                } else {
-                  pLayer = `<span>${token.char}</span>`;
-                }
-                iLayer = `<span style="visibility:hidden;">_</span>`;
-              }
-
-              html += `<div class="prompt-layer">${pLayer}</div>`;
-              html += `<div class="input-layer">${iLayer}</div>`;
-              html += '</div>'; 
-            }
-
-            html += '</div>'; 
-            visualDiv.innerHTML = html;
-          };
-
           const checkInput = () => {
             if (!startTime) startTimer();
             
-            updateVisualsText(normalInputValue); 
+            let val = normalInputValue;
+            if (!isEnglishMode) {
+              val = applyCustomIME(val);
+            }
+            normalInputValue = val;
+
+            updateGameVisuals(val, parsed); 
 
             let targetReading = parsed.tokens.map(t => t.target).join('');
 
@@ -1437,6 +1372,9 @@
           };
 
           inputField.addEventListener('keydown', (e) => {
+            handleShiftTapDown(e);
+            if (checkModeSwitchKeys(e)) return;
+
             if (e.code === 'CapsLock' || e.key === 'Alphanumeric' || e.code === 'Lang2' || e.key === 'Backspace') {
               e.preventDefault();
               normalInputValue = normalInputValue.slice(0, -1);
@@ -1453,7 +1391,12 @@
             }
           });
 
-          updateVisualsText(normalInputValue); 
+          inputField.addEventListener('keyup', (e) => {
+            checkModeSwitchKeys(e);
+            handleShiftTapUp(e);
+          });
+
+          updateGameVisuals(normalInputValue, parsed); 
 
         } else {
           inputDiv.querySelector('.real-input').focus();
