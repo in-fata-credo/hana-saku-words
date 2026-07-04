@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>花咲く言葉 (HSW配列) - タイピングプラクティス v28.06</title>
+<title>花咲く言葉 (HSW配列) - タイピングプラクティス v28.07</title>
 <style>
   :root {
     --bg-color: #fcfbf9; 
@@ -262,12 +262,12 @@
   }
   
   /* ============================================================
-     ★ 修正：キーボードレイアウトとズレ表現
+     ★ 修正：キーボードレイアウト（QWERTY準拠の段ズレ表現）
      ============================================================ */
   #keyboard-heatmap {
     display: flex;
     flex-direction: column;
-    align-items: flex-start; /* margin-leftを効かせるため */
+    align-items: flex-start; 
     gap: 4px;
     width: fit-content;
     margin: 0 auto;
@@ -305,6 +305,7 @@
     text-align: center;
   }
 
+  /* 次キー推測・ミスのCapsハイライト */
   .kb-key.next-highlight {
     background-color: #000000 !important;
     color: #ff3333 !important;
@@ -324,7 +325,7 @@
 <body>
 
 <div class="header">
-  <h2>✿ 花咲く言葉 - タイピングの庭 v28.06</h2>
+  <h2>✿ 花咲く言葉 - タイピングの庭 v28.07</h2>
   <button class="settings-btn" id="toggle-settings" title="設定・コース選択">⚙️</button>
 </div>
 
@@ -442,80 +443,77 @@
   let nextExpectedKey = null;
 
   // ============================================================
-  // ★ ルート予測アルゴリズムとプレフィックス管理（修正版）
+  // ★ 完全版：BFSを排除した軽量な「辞書逆引き」アルゴリズム
   // ============================================================
-  let searchCache = {};
+  let validPathsForKana = {}; 
   let validKeyChars = [];
-  let validMapPrefixes = new Set(); // 無効キー判定用
 
   function initSearchCaches() {
-      validMapPrefixes.clear();
       let physicalKeys = new Set();
       for (let k in customKeyMap) {
-          if (k.length === 1 && !/[ァ-ヶぁ-ん]/.test(k)) {
-              physicalKeys.add(k.toLowerCase());
-          }
-          // 配列定義のプレフィックスを全て登録
-          for(let i = 1; i <= k.length; i++) {
-              validMapPrefixes.add(k.substring(0, i));
+          for(let char of k) {
+              if (!/[ァ-ヶぁ-ん]/.test(char)) physicalKeys.add(char.toLowerCase());
           }
       }
       "abcdefghijklmnopqrstuvwxyz-.,;:/@+*<>?1234567890".split('').forEach(c => physicalKeys.add(c));
       validKeyChars = Array.from(physicalKeys);
-      searchCache = {};
-  }
-
-  // フリーズを完全に防ぐ、厳密マッチのBFSパス探索
-  function isPromising(state, target) {
-      let maxL = Math.min(state.length, 3);
-      for (let L = 0; L <= maxL; L++) {
-          let fixedPart = state.slice(0, state.length - L);
-          if (target.startsWith(fixedPart)) return true;
-      }
-      return false;
-  }
-
-  function findNextKeyAndValidity(buffer, remainingTarget) {
-      if (!remainingTarget) return { isValid: true, nextKey: null };
-
-      let cacheKey = buffer + "|" + remainingTarget;
-      if (searchCache[cacheKey]) return searchCache[cacheKey];
-
-      let queue = [ { text: buffer, path: [] } ];
-      let visited = new Set([buffer]);
       
-      let isValid = false;
-      let nextKey = null;
-
+      validPathsForKana = {};
+      
+      // BFSは「起動時に1回だけ」実行して辞書を作る。入力中は一切使わない。
+      let queue = [""];
       while(queue.length > 0) {
           let curr = queue.shift();
           
-          // STRICT EXACT match (カタカナ変換させずに判定することでスとすを区別)
-          if (remainingTarget.startsWith(curr.text)) {
-              if (curr.text !== buffer) {
-                  isValid = true;
-                  nextKey = curr.path[0];
-                  break;
-              } else if (curr.path.length === 0) {
-                  isValid = true;
+          if (curr !== "") {
+              let evalStr = applyCustomIME(curr);
+              let hasUnfinishedKatakana = /[ァ-ヶ]/.test(evalStr) && evalStr !== 'ー' && evalStr !== 'ヴ';
+              
+              if (!hasUnfinishedKatakana && evalStr.length > 0) {
+                  let norm = normalizeForMatch(evalStr);
+                  if (!validPathsForKana[norm]) validPathsForKana[norm] = [];
+                  validPathsForKana[norm].push(curr);
+                  continue; // かなが完成したら、その先は探索しない（大幅な枝刈り）
               }
           }
           
-          if (curr.path.length >= 3) continue;
-          if (!isPromising(curr.text, remainingTarget)) continue;
-
+          if (curr.length >= 4) continue; 
+          
           for (let c of validKeyChars) {
-              let nextText = applyCustomIME(curr.text + c);
-              if (nextText.length <= remainingTarget.length + 2 && !visited.has(nextText)) {
-                  visited.add(nextText);
-                  queue.push({ text: nextText, path: [...curr.path, c] });
-              }
+              queue.push(curr + c);
+          }
+      }
+  }
+
+  // 入力中にO(1)で即座に「ルートの正当性」と「次キー」を割り出す関数
+  function getNextKeyInfo(unconfirmedRaw, remainingTarget) {
+      if (remainingTarget.length === 0) return { isValid: true, nextKey: null };
+      
+      let possiblePaths = [];
+      // ターゲットの先頭1〜3文字（きゃ等）が辞書にあるか確認
+      for (let len = 1; len <= Math.min(3, remainingTarget.length); len++) {
+          let chunk = remainingTarget.substring(0, len);
+          if (validPathsForKana[chunk]) {
+              possiblePaths.push(...validPathsForKana[chunk]);
           }
       }
       
-      let result = { isValid, nextKey };
-      searchCache[cacheKey] = result;
-      return result;
+      if (possiblePaths.length === 0) return { isValid: false, nextKey: null };
+      
+      let isValid = false;
+      let nextKey = null;
+      
+      // 生の物理キー入力が、正解ルート文字列の「前方一致」になっているかだけを調べる
+      for (let path of possiblePaths) {
+          if (path.startsWith(unconfirmedRaw)) {
+              isValid = true;
+              if (path.length > unconfirmedRaw.length) {
+                  nextKey = path[unconfirmedRaw.length];
+              }
+              break; 
+          }
+      }
+      return { isValid, nextKey };
   }
 
   function resetSessionStats() {
@@ -670,11 +668,11 @@
     listEl.innerHTML = html;
   }
 
-  // ★ 新しいキーボードレイアウト定義（ズレ対応と不要キーの無地化）
+  // ★ 新しいキーボードレイアウト定義（不要キー無地化・Caps/ズレ対応）
   const KEYBOARD_LAYOUT = [
-    { spacer: '20px', keys: [{id: 'q', label: 'q'}, {id: 'w', label: 'w'}, {id: 'e', label: 'e'}, {id: 'r', label: 'r'}, {id: 't', label: ''}, {id: 'y', label: 'y'}, {id: 'u', label: 'u'}, {id: 'i', label: 'i'}, {id: 'o', label: 'o'}, {id: 'p', label: 'p'}, {id: '@', label: '@'}] },
-    { spacer: '0px', keys: [{id: 'capslock', label: 'Caps', width: '40px'}, {id: 'a', label: 'a'}, {id: 's', label: 's'}, {id: 'd', label: 'd'}, {id: 'f', label: 'f'}, {id: 'g', label: 'g'}, {id: 'h', label: 'h'}, {id: 'j', label: 'j'}, {id: 'k', label: 'k'}, {id: 'l', label: 'l'}, {id: ';', label: ';'}, {id: ':', label: ':'}] },
-    { spacer: '60px', keys: [{id: 'z', label: ''}, {id: 'x', label: ''}, {id: 'c', label: ''}, {id: 'v', label: 'v'}, {id: 'b', label: ''}, {id: 'n', label: ''}, {id: 'm', label: ''}, {id: ',', label: ''}, {id: '.', label: ''}, {id: '/', label: ''}] }
+    { spacer: '0px', keys: [{id: 'q', label: 'q'}, {id: 'w', label: 'w'}, {id: 'e', label: 'e'}, {id: 'r', label: 'r'}, {id: 't', label: ''}, {id: 'y', label: 'y'}, {id: 'u', label: 'u'}, {id: 'i', label: 'i'}, {id: 'o', label: 'o'}, {id: 'p', label: 'p'}, {id: '@', label: '@'}] },
+    { spacer: '10px', keys: [{id: 'capslock', label: 'Caps', width: '50px'}, {id: 'a', label: 'a'}, {id: 's', label: 's'}, {id: 'd', label: 'd'}, {id: 'f', label: 'f'}, {id: 'g', label: 'g'}, {id: 'h', label: 'h'}, {id: 'j', label: 'j'}, {id: 'k', label: 'k'}, {id: 'l', label: 'l'}, {id: ';', label: ';'}, {id: ':', label: ':'}] },
+    { spacer: '75px', keys: [{id: 'z', label: ''}, {id: 'x', label: ''}, {id: 'c', label: ''}, {id: 'v', label: 'v'}, {id: 'b', label: ''}, {id: 'n', label: ''}, {id: 'm', label: ''}, {id: ',', label: ''}, {id: '.', label: ''}, {id: '/', label: ''}] }
   ];
 
   function timeToColor(t, minT, maxT) {
@@ -702,7 +700,6 @@
         let bg = '#eee';
         let missBadge = '';
         
-        // ラベルがある場合のみ色付けとバッジ表示
         if (s && keyObj.label !== '') {
           const avgTime = s.timeCount > 0 ? s.timeSum / s.timeCount : null;
           bg = timeToColor(avgTime, minT, maxT);
@@ -759,7 +756,7 @@
         }
       });
       
-      initSearchCaches(); // ★ 起動時にキャッシュ準備
+      initSearchCaches(); // ★ 起動時に辞書キャッシュ準備
 
       courseData = await courseRes.json();
       buildDropdown();
@@ -812,6 +809,14 @@
     if (!str) return "";
     return str.replace(/[\u3041-\u3096]/g, match => String.fromCharCode(match.charCodeAt(0) + 0x60));
   };
+
+  function normalizeForMatch(str) {
+      if (!str) return "";
+      let s = str.replace(/[Ａ-Ｚａ-ｚ０-９]/g, function(c) {
+          return String.fromCharCode(c.charCodeAt(0) - 0xFEE0);
+      });
+      return s.replace(/[\u30A1-\u30F6]/g, match => String.fromCharCode(match.charCodeAt(0) - 0x60)).toLowerCase();
+  }
 
   function applyCustomIME(inputStr) {
     let result = "";
@@ -883,12 +888,10 @@
     });
 
     if (courseName.includes("ゲーム")) {
-      isGameMode = true;
       document.getElementById('text-container').style.display = 'none';
       document.getElementById('game-board').style.display = 'block';
       startGame(parsedCourse);
     } else {
-      isGameMode = false;
       document.getElementById('text-container').style.display = 'block';
       document.getElementById('game-board').style.display = 'none';
       
@@ -967,37 +970,77 @@
     visualWrapper.classList.remove('pop-anim');
     void visualWrapper.offsetWidth; 
     
-    updateGameVisuals('');
+    updateGameVisuals(gameInputValue, currentWordObj);
     document.getElementById('game-real-input').focus();
   }
 
-  function updateGameVisuals(val) {
-    if(!currentWordObj) return;
+  // ★ 統合された描画・次キー推測エンジン
+  function updateGameVisuals(rawVal, wordObj) {
+    if(!wordObj) return;
 
-    let targetReading = currentWordObj.tokens.map(t => t.target).join('');
+    let targetReading = wordObj.tokens.map(t => t.target).join('');
     
-    let adjustedVal = "";
-    for (let i = 0; i < val.length; i++) {
-        let typedChar = val[i];
-        let targetChar = targetReading[i];
-        if (targetChar && hiraToKata(typedChar) === targetChar) {
-            typedChar = targetChar;
+    // 生の物理キー入力から、「確定済みの長さ」を割り出す
+    let confirmedRawLen = 0;
+    let confirmedHiraLen = 0;
+    let step = 1;
+    while (step <= rawVal.length) {
+        let testRaw = rawVal.substring(confirmedRawLen, step);
+        let evalStr = applyCustomIME(testRaw);
+        
+        let hasUnfinishedKatakana = /[ァ-ヶ]/.test(evalStr) && evalStr !== 'ー' && evalStr !== 'ヴ';
+        if (!hasUnfinishedKatakana) {
+            let normEval = normalizeForMatch(evalStr);
+            let remTarget = targetReading.substring(confirmedHiraLen);
+            if (normEval.length > 0 && remTarget.startsWith(normEval)) {
+                confirmedRawLen = step;
+                confirmedHiraLen += normEval.length;
+                continue;
+            }
         }
-        adjustedVal += typedChar;
+        step++;
     }
 
-    let matchLen = 0;
-    for (let i = 0; i < adjustedVal.length; i++) {
-        if (adjustedVal[i] === targetReading[i]) matchLen++;
-        else break;
+    let unconfirmedRaw = rawVal.substring(confirmedRawLen);
+    let remainingTargetForKeys = targetReading.substring(confirmedHiraLen);
+    
+    // ★ 辞書逆引きで瞬時にパスチェック
+    let keyInfo = getNextKeyInfo(unconfirmedRaw, remainingTargetForKeys);
+    let isValidRoute = keyInfo.isValid;
+    
+    if (nextExpectedKey) {
+        const prevEl = document.getElementById('kb-key-' + nextExpectedKey);
+        if (prevEl) prevEl.classList.remove('next-highlight');
     }
 
-    let remainingVal = val;
-    let currentMatch = matchLen;
+    if (!isValidRoute) {
+        if (unconfirmedRaw.length > 0) {
+            let lastChar = unconfirmedRaw.slice(-1);
+            // そもそも配列として無効なキーか判定
+            if (!validKeyChars.includes(lastChar)) {
+                nextExpectedKey = null; // 無反応
+            } else {
+                nextExpectedKey = 'capslock'; // リカバリー不能ミス
+            }
+        }
+    } else {
+        nextExpectedKey = keyInfo.nextKey ? keyInfo.nextKey.toLowerCase() : null;
+    }
+
+    if (nextExpectedKey) {
+        const nextEl = document.getElementById('kb-key-' + nextExpectedKey);
+        if (nextEl) nextEl.classList.add('next-highlight');
+    }
+
+    // 画面表示用に未確定部分をIME変換
+    let evalUnconfirmed = applyCustomIME(unconfirmedRaw);
+    let currentMatch = confirmedHiraLen;
+    let remainingVal = evalUnconfirmed; // IME適用済みの未確定文字列
     let caretDrawn = false;
+    
     let html = '<div class="visual-tokens-container" style="justify-content: center;">';
 
-    for (const token of currentWordObj.tokens) {
+    for (const token of wordObj.tokens) {
         html += '<div class="token-wrapper">';
         let pLayer = '';
         let iLayer = '';
@@ -1006,74 +1049,32 @@
             pLayer = `<span style="visibility:hidden; user-select:none;">${token.type === 'ruby' ? token.base : token.char}</span>`;
             iLayer = `<span style="color: var(--text-completed); font-weight: bold;">${token.type === 'ruby' ? token.base : token.char}</span>`;
             currentMatch -= token.target.length;
-            remainingVal = remainingVal.substring(token.target.length);
         } else if (!caretDrawn) {
             caretDrawn = true;
             if (token.type === 'ruby') {
               const hiddenRuby = token.ruby.substring(0, currentMatch);
-              const remainingRuby = token.ruby.substring(currentMatch);
-              const activeRuby = remainingRuby.substring(0, 1);
-              const futureRuby = remainingRuby.substring(1);
+              const remRuby = token.ruby.substring(currentMatch);
+              const activeRuby = remRuby.substring(0, 1);
+              const futureRuby = remRuby.substring(1);
               pLayer = `<ruby><span style="opacity: 0.8; color: var(--text-completed); font-weight:bold;">${token.base}</span><rt><span style="visibility:hidden">${hiddenRuby}</span><span style="color: var(--text-active-prompt); font-weight:bold;">${activeRuby}</span><span style="color: var(--text-upcoming);">${futureRuby}</span></rt></ruby>`;
               lastActiveTargetChar = activeRuby || lastActiveTargetChar;
             } else {
               const hiddenChar = token.char.substring(0, currentMatch);
-              const remainingChar = token.char.substring(currentMatch);
-              const activeChar = remainingChar.substring(0, 1);
-              const futureChar = remainingChar.substring(1);
+              const remChar = token.char.substring(currentMatch);
+              const activeChar = remChar.substring(0, 1);
+              const futureChar = remChar.substring(1);
               pLayer = `<span style="visibility:hidden">${hiddenChar}</span><span style="opacity: 1; color: var(--text-active-prompt); font-weight:bold;">${activeChar}</span><span style="color: var(--text-upcoming); font-weight:bold;">${futureChar}</span>`;
               lastActiveTargetChar = activeChar || lastActiveTargetChar;
             }
 
-            // ★ 新規：BFSによる確実なルート予測
-            let remainingTarget = targetReading.substring(matchLen);
-            let extra = remainingVal.substring(currentMatch);
-            let searchResult = findNextKeyAndValidity(extra, remainingTarget);
-            let isValid = searchResult.isValid;
-
-            if (nextExpectedKey) {
-                const prevEl = document.getElementById('kb-key-' + nextExpectedKey);
-                if (prevEl) prevEl.classList.remove('next-highlight');
-            }
-
-            // ★ 新規：無効なキーか、リカバリー不能なミスかの判定
-            let isUndefined = false;
-            // 未確定の文字列が純粋なアルファベット記号類（ユーザーが物理的に打ったまま）の場合
-            if (extra.length > 0 && /^[a-zA-Z0-9-.,;:/@+*<>?]+$/.test(extra)) {
-                if (!validMapPrefixes.has(extra)) {
-                    isUndefined = true;
-                }
-            }
-
-            if (!isValid) {
-                if (isUndefined) {
-                    nextExpectedKey = null; // 配列定義外のキーは光らせない
-                } else {
-                    nextExpectedKey = 'capslock'; // ミス確定ならCapsを光らせてリカバリー案内
-                }
-            } else {
-                nextExpectedKey = searchResult.nextKey ? searchResult.nextKey.toLowerCase() : null;
-            }
-
-            if (nextExpectedKey) {
-                const nextEl = document.getElementById('kb-key-' + nextExpectedKey);
-                if (nextEl) nextEl.classList.add('next-highlight');
-            }
-
             let typedText = "";
-            let confirmedStr = remainingVal.substring(0, currentMatch);
-            for (let j = 0; j < confirmedStr.length; j++) {
-                let char = confirmedStr[j];
-                let targetChar = targetReading[matchLen - currentMatch + j];
-                if (targetChar && hiraToKata(char) === targetChar) char = targetChar;
-                typedText += char;
-            }
-            typedText = `<span style="color: var(--text-completed); font-weight: bold;">${escapeHTML(typedText)}</span>`;
-            
             let frameLastStatus = 'match';
-            for (let j = 0; j < extra.length; j++) {
-              let char = extra[j];
-              if (isValid) {
+            for (let j = 0; j < remainingVal.length; j++) {
+              let char = remainingVal[j];
+              let targetChar = targetReading[confirmedHiraLen + j];
+              if (targetChar && hiraToKata(char) === targetChar) char = targetChar;
+              
+              if (isValidRoute) {
                 typedText += `<span class="state">${escapeHTML(char)}</span>`;
                 frameLastStatus = 'state';
               } else {
@@ -1086,7 +1087,6 @@
             if(typedText === "") typedText = `<span style="visibility:hidden;">_</span>`;
 
             iLayer = `<div style="display: flex; align-items: center;">${typedText}<span class="custom-caret"></span></div>`;
-            remainingVal = "";
             currentMatch = 0;
         } else {
             if (token.type === 'ruby') {
@@ -1103,14 +1103,12 @@
     }
     html += '</div>';
     
-    document.getElementById('game-visual-wrapper').innerHTML = html;
+    document.getElementById(wordObj === currentWordObj ? 'game-visual-wrapper' : 'game-visual-wrapper').innerHTML = html;
   }
 
   const gameInputEl = document.getElementById('game-real-input');
 
   gameInputEl.addEventListener('keydown', function(e) {
-    if(gameTimer <= 0) return;
-
     if (e.code === 'CapsLock' || e.key === 'Alphanumeric' || e.code === 'Lang2' || e.key === 'Backspace') {
       e.preventDefault();
       gameInputValue = gameInputValue.slice(0, -1);
@@ -1123,31 +1121,34 @@
       e.preventDefault();
       gameInputValue += e.key;
       handleGameInputUpdate();
+      recordKeystroke(e.key);
     }
   });
 
   function handleGameInputUpdate() {
-    let val = applyCustomIME(gameInputValue);
-    gameInputValue = val;
-
-    updateGameVisuals(val);
+    updateGameVisuals(gameInputValue, currentWordObj);
 
     let targetReading = currentWordObj.tokens.map(t => t.target).join('');
-    let adjustedVal = "";
-    for (let i = 0; i < val.length; i++) {
-        let typedChar = val[i];
-        let targetChar = targetReading[i];
-        if (targetChar && hiraToKata(typedChar) === targetChar) typedChar = targetChar;
-        adjustedVal += typedChar;
+    
+    let confirmedRawLen = 0;
+    let confirmedHiraLen = 0;
+    let step = 1;
+    while (step <= gameInputValue.length) {
+        let testRaw = gameInputValue.substring(confirmedRawLen, step);
+        let evalStr = applyCustomIME(testRaw);
+        if (!(/[ァ-ヶ]/.test(evalStr) && evalStr !== 'ー' && evalStr !== 'ヴ')) {
+            let normEval = normalizeForMatch(evalStr);
+            let remTarget = targetReading.substring(confirmedHiraLen);
+            if (normEval.length > 0 && remTarget.startsWith(normEval)) {
+                confirmedRawLen = step;
+                confirmedHiraLen += normEval.length;
+                continue;
+            }
+        }
+        step++;
     }
 
-    let matchLen = 0;
-    for (let i = 0; i < adjustedVal.length; i++) {
-        if (adjustedVal[i] === targetReading[i]) matchLen++;
-        else break;
-    }
-
-    if (matchLen === targetReading.length && val.length === targetReading.length) {
+    if (confirmedHiraLen === targetReading.length && confirmedRawLen === gameInputValue.length) {
         totalChars += currentWordObj.targetLine.length;
         const { displayChars, moraCount } = computeLineMetrics(currentWordObj);
         statsDisplayCharsTotal += displayChars;
@@ -1231,34 +1232,67 @@
           normalInputValue = ""; 
           inputField.focus();
 
-          const updateVisuals = (val) => {
+          const updateVisualsText = (rawVal) => {
             let targetReading = parsed.tokens.map(t => t.target).join('');
-
-            let adjustedVal = "";
-            for (let i = 0; i < val.length; i++) {
-                let typedChar = val[i];
-                let targetChar = targetReading[i];
-                if (targetChar && hiraToKata(typedChar) === targetChar) {
-                    typedChar = targetChar;
+            
+            let confirmedRawLen = 0;
+            let confirmedHiraLen = 0;
+            let step = 1;
+            while (step <= rawVal.length) {
+                let testRaw = rawVal.substring(confirmedRawLen, step);
+                let evalStr = applyCustomIME(testRaw);
+                
+                let hasUnfinishedKatakana = /[ァ-ヶ]/.test(evalStr) && evalStr !== 'ー' && evalStr !== 'ヴ';
+                if (!hasUnfinishedKatakana) {
+                    let normEval = normalizeForMatch(evalStr);
+                    let remTarget = targetReading.substring(confirmedHiraLen);
+                    if (normEval.length > 0 && remTarget.startsWith(normEval)) {
+                        confirmedRawLen = step;
+                        confirmedHiraLen += normEval.length;
+                        continue;
+                    }
                 }
-                adjustedVal += typedChar;
+                step++;
             }
 
-            let matchLen = 0;
-            for (let i = 0; i < adjustedVal.length; i++) {
-                if (adjustedVal[i] === targetReading[i]) matchLen++;
-                else break;
+            let unconfirmedRaw = rawVal.substring(confirmedRawLen);
+            let remainingTargetForKeys = targetReading.substring(confirmedHiraLen);
+            
+            let keyInfo = getNextKeyInfo(unconfirmedRaw, remainingTargetForKeys);
+            let isValidRoute = keyInfo.isValid;
+            
+            if (nextExpectedKey) {
+                const prevEl = document.getElementById('kb-key-' + nextExpectedKey);
+                if (prevEl) prevEl.classList.remove('next-highlight');
             }
 
-            let remainingVal = val;
-            let currentMatch = matchLen;
+            if (!isValidRoute) {
+                if (unconfirmedRaw.length > 0) {
+                    let lastChar = unconfirmedRaw.slice(-1);
+                    if (!validKeyChars.includes(lastChar)) {
+                        nextExpectedKey = null; 
+                    } else {
+                        nextExpectedKey = 'capslock'; 
+                    }
+                }
+            } else {
+                nextExpectedKey = keyInfo.nextKey ? keyInfo.nextKey.toLowerCase() : null;
+            }
+
+            if (nextExpectedKey) {
+                const nextEl = document.getElementById('kb-key-' + nextExpectedKey);
+                if (nextEl) nextEl.classList.add('next-highlight');
+            }
+
+            let evalUnconfirmed = applyCustomIME(unconfirmedRaw);
+            let currentMatch = confirmedHiraLen;
+            let remainingVal = evalUnconfirmed; 
             let caretDrawn = false;
-
+            
             let html = '<div class="visual-tokens-container">';
 
             for (const token of parsed.tokens) {
               html += '<div class="token-wrapper">';
-              
               let pLayer = '';
               let iLayer = '';
 
@@ -1266,74 +1300,32 @@
                 pLayer = `<ruby style="visibility:hidden; user-select:none;">${token.type === 'ruby' ? token.base : token.char}<rt>_</rt></ruby>`;
                 iLayer = `<span style="color: var(--text-completed); font-weight: bold;">${token.type === 'ruby' ? token.base : token.char}</span>`;
                 currentMatch -= token.target.length;
-                remainingVal = remainingVal.substring(token.target.length);
               } else if (!caretDrawn) {
                 caretDrawn = true;
-                
                 if (token.type === 'ruby') {
                   const hiddenRuby = token.ruby.substring(0, currentMatch);
-                  const remainingRuby = token.ruby.substring(currentMatch);
-                  const activeRuby = remainingRuby.substring(0, 1);
-                  const futureRuby = remainingRuby.substring(1);
+                  const remRuby = token.ruby.substring(currentMatch);
+                  const activeRuby = remRuby.substring(0, 1);
+                  const futureRuby = remRuby.substring(1);
                   pLayer = `<ruby><span style="opacity: 0.8; color: var(--text-completed); font-weight:bold;">${token.base}</span><rt><span style="visibility:hidden">${hiddenRuby}</span><span style="color: var(--text-active-prompt); font-weight:bold;">${activeRuby}</span><span style="color: var(--text-upcoming);">${futureRuby}</span></rt></ruby>`;
                   lastActiveTargetChar = activeRuby || lastActiveTargetChar;
                 } else {
                   const hiddenChar = token.char.substring(0, currentMatch);
-                  const remainingChar = token.char.substring(currentMatch);
-                  const activeChar = remainingChar.substring(0, 1);
-                  const futureChar = remainingChar.substring(1);
-                  pLayer = `<ruby><span style="visibility:hidden">${hiddenChar}</span><span style="opacity: 1; color: var(--text-active-prompt); font-weight:bold;">${activeChar}</span><span style="color: var(--text-upcoming); font-weight:bold;">${futureChar}</span><rt style="visibility:hidden">_</rt></ruby>`;
+                  const remChar = token.char.substring(currentMatch);
+                  const activeChar = remChar.substring(0, 1);
+                  const futureChar = remChar.substring(1);
+                  pLayer = `<span style="visibility:hidden">${hiddenChar}</span><span style="opacity: 1; color: var(--text-active-prompt); font-weight:bold;">${activeChar}</span><span style="color: var(--text-upcoming); font-weight:bold;">${futureChar}</span>`;
                   lastActiveTargetChar = activeChar || lastActiveTargetChar;
                 }
 
-                // ★ 新規：BFSによる確実なルート予測
-                let remainingTarget = targetReading.substring(matchLen);
-                let extra = remainingVal.substring(currentMatch);
-                let searchResult = findNextKeyAndValidity(extra, remainingTarget);
-                let isValid = searchResult.isValid;
-
-                if (nextExpectedKey) {
-                    const prevEl = document.getElementById('kb-key-' + nextExpectedKey);
-                    if (prevEl) prevEl.classList.remove('next-highlight');
-                }
-
-                // ★ 新規：無効なキーか、リカバリー不能なミスかの判定
-                let isUndefined = false;
-                if (extra.length > 0 && /^[a-zA-Z0-9-.,;:/@+*<>?]+$/.test(extra)) {
-                    if (!validMapPrefixes.has(extra)) {
-                        isUndefined = true;
-                    }
-                }
-
-                if (!isValid) {
-                    if (isUndefined) {
-                        nextExpectedKey = null; 
-                    } else {
-                        nextExpectedKey = 'capslock'; 
-                    }
-                } else {
-                    nextExpectedKey = searchResult.nextKey ? searchResult.nextKey.toLowerCase() : null;
-                }
-
-                if (nextExpectedKey) {
-                    const nextEl = document.getElementById('kb-key-' + nextExpectedKey);
-                    if (nextEl) nextEl.classList.add('next-highlight');
-                }
-
                 let typedText = "";
-                let confirmedStr = remainingVal.substring(0, currentMatch);
-                for (let j = 0; j < confirmedStr.length; j++) {
-                    let char = confirmedStr[j];
-                    let targetChar = targetReading[matchLen - currentMatch + j];
-                    if (targetChar && hiraToKata(char) === targetChar) char = targetChar;
-                    typedText += char;
-                }
-                typedText = `<span style="color: var(--text-completed); font-weight: bold;">${escapeHTML(typedText)}</span>`;
-                
                 let frameLastStatus = 'match';
-                for (let j = 0; j < extra.length; j++) {
-                  let char = extra[j];
-                  if (isValid) {
+                for (let j = 0; j < remainingVal.length; j++) {
+                  let char = remainingVal[j];
+                  let targetChar = targetReading[confirmedHiraLen + j];
+                  if (targetChar && hiraToKata(char) === targetChar) char = targetChar;
+                  
+                  if (isValidRoute) {
                     typedText += `<span class="state">${escapeHTML(char)}</span>`;
                     frameLastStatus = 'state';
                   } else {
@@ -1346,13 +1338,12 @@
                 if(typedText === "") typedText = `<span style="visibility:hidden;">_</span>`;
 
                 iLayer = `<div style="display: flex; align-items: center;">${typedText}<span class="custom-caret"></span></div>`;
-                remainingVal = "";
                 currentMatch = 0;
               } else {
                 if (token.type === 'ruby') {
                   pLayer = `<ruby>${token.base}<rt>${token.ruby}</rt></ruby>`;
                 } else {
-                  pLayer = `<ruby>${token.char}<rt style="visibility:hidden">_</rt></ruby>`;
+                  pLayer = `<span>${token.char}</span>`;
                 }
                 iLayer = `<span style="visibility:hidden;">_</span>`;
               }
@@ -1369,30 +1360,29 @@
           const checkInput = () => {
             if (!startTime) startTimer();
             
-            let val = applyCustomIME(normalInputValue);
-            normalInputValue = val;
-
-            let adjustedVal = "";
-            for (let i = 0; i < val.length; i++) {
-              let typedChar = val[i];
-              let targetChar = parsed.targetLine[i]; 
-              if (targetChar && hiraToKata(typedChar) === targetChar) {
-                typedChar = targetChar;
-              }
-              adjustedVal += typedChar;
-            }
-
-            updateVisuals(adjustedVal, val); 
+            updateVisualsText(normalInputValue); 
 
             let targetReading = parsed.tokens.map(t => t.target).join('');
 
-            let matchLen = 0;
-            for (let i = 0; i < adjustedVal.length; i++) {
-                if (adjustedVal[i] === targetReading[i]) matchLen++;
-                else break;
+            let confirmedRawLen = 0;
+            let confirmedHiraLen = 0;
+            let step = 1;
+            while (step <= normalInputValue.length) {
+                let testRaw = normalInputValue.substring(confirmedRawLen, step);
+                let evalStr = applyCustomIME(testRaw);
+                if (!(/[ァ-ヶ]/.test(evalStr) && evalStr !== 'ー' && evalStr !== 'ヴ')) {
+                    let normEval = normalizeForMatch(evalStr);
+                    let remTarget = targetReading.substring(confirmedHiraLen);
+                    if (normEval.length > 0 && remTarget.startsWith(normEval)) {
+                        confirmedRawLen = step;
+                        confirmedHiraLen += normEval.length;
+                        continue;
+                    }
+                }
+                step++;
             }
 
-            if (matchLen === targetReading.length && val.length === targetReading.length) {
+            if (confirmedHiraLen === targetReading.length && confirmedRawLen === normalInputValue.length) {
               totalChars += parsed.targetLine.length;
               const { displayChars, moraCount } = computeLineMetrics(parsed);
               statsDisplayCharsTotal += displayChars;
@@ -1425,7 +1415,7 @@
             }
           });
 
-          updateVisuals(normalInputValue); 
+          updateVisualsText(normalInputValue); 
 
         } else {
           inputDiv.querySelector('.real-input').focus();
