@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>花咲く言葉 (HSW配列) - タイピングプラクティス v28.01</title>
+<title>花咲く言葉 (HSW配列) - タイピングプラクティス v28.02</title>
 <style>
   :root {
     --bg-color: #fcfbf9; 
@@ -47,32 +47,6 @@
     transition: color 0.2s;
   }
   .settings-btn:hover { color: var(--text-active-prompt); }
-
-  #mode-indicator {
-    text-align: center;
-    font-size: 16px;
-    font-weight: bold;
-    margin-bottom: 40px;
-    padding: 12px 24px;
-    border-radius: 8px;
-    cursor: pointer;
-    user-select: none;
-    transition: all 0.2s;
-    width: fit-content;
-    margin-left: auto;
-    margin-right: auto;
-    font-family: sans-serif;
-  }
-  .mode-hsw {
-    background-color: rgba(118, 149, 102, 0.1);
-    color: var(--text-active-prompt);
-    border: 1px solid var(--text-active-prompt);
-  }
-  .mode-eng {
-    background-color: rgba(225, 29, 72, 0.1);
-    color: #e11d48;
-    border: 1px solid #e11d48;
-  }
   
   #settings-panel {
     display: none;
@@ -317,7 +291,7 @@
   }
   
   /* ============================================================
-     ★ 修正：次に押すべきキーの強調スタイル（黒セル＋赤文字＋文字大）
+     ★ 次に押すべきキーの強調スタイル（黒セル＋赤文字＋文字大）
      ============================================================ */
   .kb-key.next-highlight {
     background-color: #000000 !important;
@@ -352,12 +326,8 @@
 <body>
 
 <div class="header">
-  <h2>✿ 花咲く言葉 - タイピングの庭 v28.01</h2>
+  <h2>✿ 花咲く言葉 - タイピングの庭 v28.02</h2>
   <button class="settings-btn" id="toggle-settings" title="設定・コース選択">⚙️</button>
-</div>
-
-<div id="mode-indicator" class="mode-hsw" onclick="toggleInputMode()">
-  🌸 現在のモード：HSW配列 (無変換キーで英語へ)
 </div>
 
 <div id="settings-panel">
@@ -476,23 +446,141 @@
   let nextExpectedKey = null;
 
   // ============================================================
-  // ★ 追加：入力途中の文字列が正しいプレフィックスか判定する関数（NG判定用）
+  // ★ ルート探索：customKeyMapから「ある『かな』に到達できる全ての中間状態」を逆算
   // ============================================================
-  function checkValidInputState(extraStr, targetStr) {
-      if (!extraStr) return true;
-      if (!targetStr) return false;
+  let validPrefixCache = {};
+
+  function getValidEvaluatedStates(targetStr) {
+      if (!targetStr) return new Set();
+      let target = targetStr.substring(0, 2); 
+      if (validPrefixCache[target]) return validPrefixCache[target];
+
+      let validStates = new Set();
+      validStates.add("");
       
-      let lowerExtra = extraStr.toLowerCase();
-      
-      for (let k in customKeyMap) {
-          let mappedKana = customKeyMap[k];
-          // mappedKanaがターゲット文字列の先頭と一致するか
-          if (targetStr.startsWith(mappedKana)) {
-              // さらに、入力中のローマ字(extraStr)が、そのキー(k)のプレフィックスになっているか
-              if (k.toLowerCase().startsWith(lowerExtra)) return true;
+      let queue = [target, targetStr.charAt(0)]; 
+      let visited = new Set(queue);
+
+      // BFSで逆算：例えば「ま」なら「マa」→「ナa」のように遡り、全ての中間状態を記録
+      while(queue.length > 0) {
+          let curr = queue.shift();
+          validStates.add(curr);
+
+          // その状態のプレフィックス（例："マa"なら"マ"）も正当な途中経過
+          for(let i=1; i<=curr.length; i++) {
+              validStates.add(curr.substring(0, i));
+          }
+
+          for (let k in customKeyMap) {
+              // マップの変換結果がcurrに一致、またはcurrから始まる場合
+              if (customKeyMap[k] === curr || customKeyMap[k].startsWith(curr)) {
+                  if (!visited.has(k)) {
+                      visited.add(k);
+                      queue.push(k);
+                  }
+              }
           }
       }
+      
+      // 直接ローマ字入力等のフォールバック
+      for (let k in customKeyMap) {
+          if (customKeyMap[k] === target || customKeyMap[k] === targetStr.charAt(0)) {
+              for(let i=1; i<=k.length; i++) validStates.add(k.substring(0, i));
+          }
+      }
+
+      validPrefixCache[target] = validStates;
+      return validStates;
+  }
+
+  // ============================================================
+  // ★ 入力途中の文字列が正しいルート（ナ→マ→ま など）に乗っているか判定
+  // ============================================================
+  function checkValidInputState(extraStr, remainingTarget) {
+      if (!extraStr) return true;
+      if (!remainingTarget) return false;
+      
+      let target1 = remainingTarget.substring(0, 1);
+      let target2 = remainingTarget.substring(0, 2);
+      
+      let valid1 = getValidEvaluatedStates(target1);
+      let valid2 = getValidEvaluatedStates(target2);
+      
+      // 中間状態（例：ナ）が逆算した正当ルート上に存在していればOK（赤字にしない）
+      if (valid1.has(extraStr) || valid2.has(extraStr)) return true;
+      
+      if (remainingTarget.startsWith(extraStr)) return true;
+      let normalizedExtra = normalizeForMatch(extraStr);
+      if (remainingTarget.startsWith(normalizedExtra)) return true;
+
       return false;
+  }
+
+  // ============================================================
+  // ★ 次に押すべきキーの推測（中間状態からの推測に対応）
+  // ============================================================
+  function getNextExpectedKey(currentBuffer, targetStr) {
+      if (!targetStr) return null;
+      let target1 = targetStr.substring(0, 1);
+      let target2 = targetStr.substring(0, 2);
+      
+      let valid1 = getValidEvaluatedStates(target1);
+      let valid2 = getValidEvaluatedStates(target2);
+      let validStates = new Set([...valid1, ...valid2]);
+
+      // 現在のバッファ（例：ナ）に a〜z を足して、正当なルートに進めるキーを探す
+      const candidates = "abcdefghijklmnopqrstuvwxyz,.-;1234567890".split('');
+      for (let c of candidates) {
+          let nextState = currentBuffer + c;
+          let evaluated = applyCustomIME(nextState);
+          
+          if (validStates.has(evaluated) && evaluated !== currentBuffer) {
+              return c;
+          }
+          if (validStates.has(nextState)) {
+              return c;
+          }
+      }
+      
+      // バッファが空の時は最初の1打目を探す
+      if (currentBuffer === "") {
+          for (let state of validStates) {
+              if (state.length === 1 && candidates.includes(state)) {
+                  return state;
+              }
+          }
+      }
+      return null;
+  }
+
+  function updateNextKeyHighlight(targetHiraStr, val) {
+      if (nextExpectedKey) {
+          const prevEl = document.getElementById('kb-key-' + nextExpectedKey);
+          if (prevEl) prevEl.classList.remove('next-highlight');
+      }
+
+      nextExpectedKey = null;
+      let matchVal = normalizeForMatch(val);
+      let matchTarget = targetHiraStr;
+      
+      let matchLen = 0;
+      for (let i = 0; i < matchVal.length; i++) {
+          if (/[ァ-ヶ]/.test(matchVal[i]) && matchVal[i] !== 'ー') break;
+          if (matchVal[i] === matchTarget[i]) matchLen++;
+          else break;
+      }
+
+      if (!matchTarget || matchLen >= matchTarget.length) return;
+
+      let extraStr = matchVal.substring(matchLen);
+      let remainingTarget = matchTarget.substring(matchLen);
+
+      let nextKey = getNextExpectedKey(extraStr, remainingTarget);
+      if (nextKey) {
+          nextExpectedKey = nextKey.toLowerCase();
+          const nextEl = document.getElementById('kb-key-' + nextExpectedKey);
+          if (nextEl) nextEl.classList.add('next-highlight');
+      }
   }
 
   function resetSessionStats() {
@@ -511,55 +599,6 @@
     renderHeatmap();
     renderMistakeList();
     updateStatsPanel(0);
-  }
-
-  // ============================================================
-  // ★ 修正：次に押すべきキーの推測ロジック（未確定状態も考慮）
-  // ============================================================
-  function updateNextKeyHighlight(targetHiraStr, val) {
-    if (nextExpectedKey) {
-        const prevEl = document.getElementById('kb-key-' + nextExpectedKey);
-        if (prevEl) prevEl.classList.remove('next-highlight');
-    }
-
-    nextExpectedKey = null;
-    let matchVal = normalizeForMatch(val);
-    let matchTarget = targetHiraStr;
-    
-    let matchLen = 0;
-    for (let i = 0; i < matchVal.length; i++) {
-        if (/[ァ-ヶ]/.test(matchVal[i]) && matchVal[i] !== 'ー') break;
-        if (matchVal[i] === matchTarget[i]) matchLen++;
-        else break;
-    }
-
-    if (!matchTarget || matchLen >= matchTarget.length) return;
-
-    // 現在未確定の入力途中文字列 (例：「か」を打とうとして「k」まで打った状態)
-    let extraStr = matchVal.substring(matchLen).toLowerCase();
-    let remainingTarget = matchTarget.substring(matchLen);
-
-    let bestKey = null;
-    for (let k in customKeyMap) {
-        let mappedKana = customKeyMap[k];
-        if (remainingTarget.startsWith(mappedKana)) {
-            // customKeyMapのキーが、今の未確定文字列(extraStr)から始まっている場合
-            if (k.toLowerCase().startsWith(extraStr)) {
-                // extraStrの次に来るべき1文字を特定する
-                let nextChar = k[extraStr.length];
-                if (nextChar) {
-                    bestKey = nextChar.toLowerCase();
-                    break;
-                }
-            }
-        }
-    }
-
-    if (bestKey) {
-        nextExpectedKey = bestKey;
-        const nextEl = document.getElementById('kb-key-' + nextExpectedKey);
-        if (nextEl) nextEl.classList.add('next-highlight');
-    }
   }
 
   function countMora(str) {
@@ -743,14 +782,6 @@
   function setInputMode(isEnglish) {
       if (isEnglishMode === isEnglish) return;
       isEnglishMode = isEnglish;
-      const indicator = document.getElementById('mode-indicator');
-      if (isEnglish) {
-          indicator.className = 'mode-eng';
-          indicator.innerHTML = '🔤 現在のモード：英語直接入力 (変換キーで日本語へ)';
-      } else {
-          indicator.className = 'mode-hsw';
-          indicator.innerHTML = '🌸 現在のモード：HSW配列 (無変換キーで英語へ)';
-      }
   }
 
   window.toggleInputMode = function() {
@@ -1088,7 +1119,7 @@
 
     let matchLen = 0;
     for (let i = 0; i < matchVal.length; i++) {
-        if (/[ァ-ヶ]/.test(rawVal[i]) && rawVal[i] !== 'ー') {
+        if (/[ァ-ヶ]/.test(matchVal[i]) && matchVal[i] !== 'ー') {
             break;
         }
         if (matchVal[i] === matchTarget[i]) matchLen++;
@@ -1142,7 +1173,6 @@
             let extra = remainingVal.substring(currentMatch);
             let frameLastStatus = 'match';
             
-            // ★ 修正：入力途中文字列の正当性判定
             let remainingTarget = matchTarget.substring(matchLen);
             let isValid = checkValidInputState(extra, remainingTarget);
 
@@ -1386,7 +1416,6 @@
                 let extra = remainingVal.substring(currentMatch);
                 let frameLastStatus = 'match';
                 
-                // ★ 修正：入力途中文字列の正当性判定
                 let remainingTarget = matchTarget.substring(matchLen);
                 let isValid = checkValidInputState(extra, remainingTarget);
 
@@ -1459,7 +1488,7 @@
               const { displayChars, moraCount } = computeLineMetrics(parsed);
               statsDisplayCharsTotal += displayChars;
               statsMoraTotal += moraCount;
-              skipNextTimingGap = true; // 次の行の最初の1打は「思考時間」なので計測除外
+              skipNextTimingGap = true; 
               currentIndex++;
               renderLines();
               
@@ -1531,7 +1560,7 @@
   }
 
   document.addEventListener('click', (e) => {
-    if (e.target.closest('#toggle-settings') || e.target.closest('#settings-panel') || e.target.closest('.load-btn') || e.target.closest('#mode-indicator')) return;
+    if (e.target.closest('#toggle-settings') || e.target.closest('#settings-panel') || e.target.closest('.load-btn')) return;
     
     if (isGameMode) {
        const gameInput = document.getElementById('game-real-input');
