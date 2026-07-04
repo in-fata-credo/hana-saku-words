@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>花咲く言葉 (HSW配列) - タイピングプラクティス v28.05</title>
+<title>花咲く言葉 (HSW配列) - タイピングプラクティス v28.06</title>
 <style>
   :root {
     --bg-color: #fcfbf9; 
@@ -319,7 +319,7 @@
 <body>
 
 <div class="header">
-  <h2>✿ 花咲く言葉 - タイピングの庭 v28.05</h2>
+  <h2>✿ 花咲く言葉 - タイピングの庭 v28.06</h2>
   <button class="settings-btn" id="toggle-settings" title="設定・コース選択">⚙️</button>
 </div>
 
@@ -437,16 +437,22 @@
   let nextExpectedKey = null;
 
   // ============================================================
-  // ★ NEW: 超軽量・完全正確なルート予測アルゴリズム
+  // ルート予測アルゴリズムとプレフィックス管理
   // ============================================================
   let recipeCache = {};
   let validKeyChars = [];
+  let validMapPrefixes = new Set(); // ★ 無効なキー（存在しない子音）の判定用
 
   function initSearchCaches() {
+      validMapPrefixes.clear();
       let physicalKeys = new Set();
       for (let k in customKeyMap) {
           if (k.length === 1 && !/[ァ-ヶぁ-ん]/.test(k)) {
               physicalKeys.add(k.toLowerCase());
+          }
+          // 配列定義のプレフィックスを全て登録
+          for(let i = 1; i <= k.length; i++) {
+              validMapPrefixes.add(k.substring(0, i));
           }
       }
       "abcdefghijklmnopqrstuvwxyz-.,;:/@+*<>?1234567890".split('').forEach(c => physicalKeys.add(c));
@@ -475,7 +481,6 @@
 
           for (let c of validKeyChars) {
               let nextText = applyCustomIME(curr.text + c);
-              // パスが爆発しないように、結果がターゲット長+1以内に収まるものだけ探索
               if (nextText.length <= targetStr.length + 1 && !visited.has(nextText)) {
                   visited.add(nextText);
                   queue.push({ text: nextText, path: [...curr.path, c] });
@@ -658,11 +663,11 @@
     listEl.innerHTML = html;
   }
 
-  const KEYBOARD_ROWS = [
-    ['1','2','3','4','5','6','7','8','9','0','-'],
-    ['q','w','e','r','t','y','u','i','o','p'],
-    ['a','s','d','f','g','h','j','k','l',';'],
-    ['z','x','c','v','b','n','m',',','.','/']
+  // ★ 新しいキーボードレイアウト定義
+  const KEYBOARD_LAYOUT = [
+    [{id: 'q', label: 'q'}, {id: 'w', label: 'w'}, {id: 'e', label: 'e'}, {id: 'r', label: 'r'}, {id: 't', label: ''}, {id: 'y', label: 'y'}, {id: 'u', label: 'u'}, {id: 'i', label: 'i'}, {id: 'o', label: 'o'}, {id: 'p', label: 'p'}, {id: '@', label: '@'}],
+    [{id: 'capslock', label: 'Caps', width: '52px'}, {id: 'a', label: 'a'}, {id: 's', label: 's'}, {id: 'd', label: 'd'}, {id: 'f', label: 'f'}, {id: 'g', label: 'g'}, {id: 'h', label: 'h'}, {id: 'j', label: 'j'}, {id: 'k', label: 'k'}, {id: 'l', label: 'l'}, {id: ';', label: ';'}, {id: ':', label: ':'}],
+    [{id: 'z', label: ''}, {id: 'x', label: ''}, {id: 'c', label: ''}, {id: 'v', label: ''}, {id: 'b', label: ''}, {id: 'n', label: ''}, {id: 'm', label: ''}, {id: ',', label: ''}, {id: '.', label: ''}, {id: '/', label: ''}]
   ];
 
   function timeToColor(t, minT, maxT) {
@@ -683,19 +688,20 @@
     const maxT = avgTimes.length > 0 ? Math.max(...avgTimes) : 0;
 
     let html = '';
-    KEYBOARD_ROWS.forEach(row => {
+    KEYBOARD_LAYOUT.forEach(row => {
       html += '<div class="kb-row">';
-      row.forEach(key => {
-        const s = keyStats[key];
+      row.forEach(keyObj => {
+        const s = keyStats[keyObj.id];
         let bg = '#eee';
         let missBadge = '';
-        if (s) {
+        if (s && keyObj.label !== '') {
           const avgTime = s.timeCount > 0 ? s.timeSum / s.timeCount : null;
           bg = timeToColor(avgTime, minT, maxT);
           if (s.missCount > 0) missBadge = `<span class="kb-miss-badge">${s.missCount}</span>`;
         }
-        const highlightClass = (key === nextExpectedKey) ? ' next-highlight' : '';
-        html += `<div class="kb-key${highlightClass}" id="kb-key-${key}" style="background-color:${bg};">${escapeHTML(key)}${missBadge}</div>`;
+        const highlightClass = (keyObj.id === nextExpectedKey) ? ' next-highlight' : '';
+        const widthStyle = keyObj.width ? `width: ${keyObj.width};` : '';
+        html += `<div class="kb-key${highlightClass}" id="kb-key-${keyObj.id}" style="background-color:${bg}; ${widthStyle}">${escapeHTML(keyObj.label)}${missBadge}</div>`;
       });
       html += '</div>';
     });
@@ -1009,7 +1015,7 @@
               lastActiveTargetChar = activeChar || lastActiveTargetChar;
             }
 
-            // ★ NEW: キャッシュを利用した超軽量レシピチェック
+            // ★ キャッシュを利用した超軽量レシピチェック
             let remainingTarget = token.target.substring(currentMatch);
             let nextKana = getFirstKana(remainingTarget);
             let recipe = getRecipe(nextKana);
@@ -1021,8 +1027,20 @@
                 const prevEl = document.getElementById('kb-key-' + nextExpectedKey);
                 if (prevEl) prevEl.classList.remove('next-highlight');
             }
-            let nextKey = recipe[extra];
-            nextExpectedKey = nextKey ? nextKey.toLowerCase() : null;
+
+            // ★ 修正後の次キー表示・無効キー判定ロジック
+            if (!isValid) {
+                // 配列に定義されていないキーを打った場合は無反応
+                if (extra.length === 1 && !validMapPrefixes.has(extra)) {
+                    nextExpectedKey = null;
+                } else {
+                    nextExpectedKey = 'capslock'; // 修正不可能ならCapsを案内
+                }
+            } else {
+                let nextKey = recipe[extra];
+                nextExpectedKey = nextKey ? nextKey.toLowerCase() : null;
+            }
+
             if (nextExpectedKey) {
                 const nextEl = document.getElementById('kb-key-' + nextExpectedKey);
                 if (nextEl) nextEl.classList.add('next-highlight');
@@ -1091,7 +1109,6 @@
       e.preventDefault();
       gameInputValue += e.key;
       handleGameInputUpdate();
-      recordKeystroke(e.key);
     }
   });
 
@@ -1255,7 +1272,7 @@
                   lastActiveTargetChar = activeChar || lastActiveTargetChar;
                 }
 
-                // ★ NEW: キャッシュを利用した超軽量レシピチェック
+                // ★ キャッシュを利用した超軽量レシピチェック
                 let remainingTarget = token.target.substring(currentMatch);
                 let nextKana = getFirstKana(remainingTarget);
                 let recipe = getRecipe(nextKana);
@@ -1267,8 +1284,19 @@
                     const prevEl = document.getElementById('kb-key-' + nextExpectedKey);
                     if (prevEl) prevEl.classList.remove('next-highlight');
                 }
-                let nextKey = recipe[extra];
-                nextExpectedKey = nextKey ? nextKey.toLowerCase() : null;
+
+                // ★ 修正後の次キー表示・無効キー判定ロジック
+                if (!isValid) {
+                    if (extra.length === 1 && !validMapPrefixes.has(extra)) {
+                        nextExpectedKey = null;
+                    } else {
+                        nextExpectedKey = 'capslock';
+                    }
+                } else {
+                    let nextKey = recipe[extra];
+                    nextExpectedKey = nextKey ? nextKey.toLowerCase() : null;
+                }
+
                 if (nextExpectedKey) {
                     const nextEl = document.getElementById('kb-key-' + nextExpectedKey);
                     if (nextEl) nextEl.classList.add('next-highlight');
@@ -1326,18 +1354,19 @@
             let val = applyCustomIME(normalInputValue);
             normalInputValue = val;
 
-            updateVisuals(val); 
-
-            let targetReading = parsed.tokens.map(t => t.target).join('');
             let adjustedVal = "";
             for (let i = 0; i < val.length; i++) {
               let typedChar = val[i];
-              let targetChar = targetReading[i]; 
+              let targetChar = parsed.targetLine[i]; 
               if (targetChar && hiraToKata(typedChar) === targetChar) {
                 typedChar = targetChar;
               }
               adjustedVal += typedChar;
             }
+
+            updateVisuals(adjustedVal, val); 
+
+            let targetReading = parsed.tokens.map(t => t.target).join('');
 
             let matchLen = 0;
             for (let i = 0; i < adjustedVal.length; i++) {
