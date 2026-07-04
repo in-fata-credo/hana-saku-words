@@ -48,7 +48,6 @@
   }
   .settings-btn:hover { color: var(--text-active-prompt); }
 
-  /* ★ 追加：モード切替インジケーターのスタイル */
   #mode-indicator {
     text-align: center;
     font-size: 16px;
@@ -112,9 +111,6 @@
   }
   .load-btn:hover { background-color: #5c754f; }
 
-  /* -------------------------------------
-     通常モードのレイアウト
-     ------------------------------------- */
   #text-container {
     min-height: 300px;
     margin-bottom: 40px;
@@ -125,9 +121,6 @@
   }
   .line-block.completed-block { margin-bottom: 5px; }
 
-  /* -------------------------------------
-     ゲームモード専用レイアウト
-     ------------------------------------- */
   #game-board {
     display: none;
     padding: 20px 0;
@@ -155,9 +148,6 @@
     animation: pop 0.15s cubic-bezier(0.1, 0.8, 0.3, 1) forwards;
   }
 
-  /* -------------------------------------
-     縦連動レイアウト（共通）
-     ------------------------------------- */
   .visual-tokens-container {
     display: flex; flex-wrap: wrap; align-items: flex-end; row-gap: 20px;
   }
@@ -201,7 +191,7 @@
 <body>
 
 <div class="header">
-  <h2>✿ 花咲く言葉 - タイピングの庭 v28</h2>
+  <h2>✿ 花咲く言葉 - タイピングの庭 v28.01</h2>
   <button class="settings-btn" id="toggle-settings" title="設定・コース選択">⚙️</button>
 </div>
 
@@ -250,9 +240,6 @@
 </div>
 
 <script>
-  // =========================================================
-  // ★ グローバル変数の定義
-  // =========================================================
   let customKeyMap = {
     ",": "、", ".": "。", "-": "ー", "?": "？", "!": "！"
   };
@@ -284,9 +271,6 @@
   let normalInputValue = "";
   let gameInputValue = "";
 
-  // =========================================================
-  // ★ 入力モード管理（UI連動）
-  // =========================================================
   function setInputMode(isEnglish) {
       if (isEnglishMode === isEnglish) return;
       isEnglishMode = isEnglish;
@@ -300,14 +284,12 @@
       }
   }
 
-  // 画面クリックで強制切り替えする関数
   window.toggleInputMode = function() {
       setInputMode(!isEnglishMode);
       const activeInput = document.querySelector('.real-input:focus') || document.querySelector('.real-input') || document.getElementById('game-real-input');
       if (activeInput) activeInput.focus();
   };
 
-  // 変換・無変換キーの判定ロジック（keydown/keyup両方で使う）
   function checkModeSwitchKeys(e) {
       if (e.code === 'NonConvert' || e.key === 'NonConvert' || e.keyCode === 29) {
           e.preventDefault();
@@ -323,17 +305,41 @@
   }
 
   // =========================================================
-  // ★ データの非同期読み込み (Fetch API)
+  // 🚀 強化版：パス自動探索 ＆ エラー詳細出力機能
   // =========================================================
   async function initApp() {
     try {
-      const [romanRes, courseRes] = await Promise.all([
-        fetch('data/romantable.txt'),
-        fetch('data/course.json')
-      ]);
+      // 考えられるすべてのファイル位置を定義して、順番に探す
+      const pathCandidates = [
+        { r: 'data/romantable.txt', c: 'data/course.json' },         // パターンB: typing/data/ にある場合
+        { r: '../data/romantable.txt', c: '../data/course.json' },   // パターンA: 1つ上の階層にある場合
+        { r: '/hana-saku-words/data/romantable.txt', c: '/hana-saku-words/data/course.json' } // 絶対パス
+      ];
 
-      if (!romanRes.ok || !courseRes.ok) throw new Error("ファイルの取得に失敗しました。");
+      let romanRes = null, courseRes = null;
+      let isFound = false;
 
+      for (let paths of pathCandidates) {
+        try {
+          let r = await fetch(paths.r);
+          let c = await fetch(paths.c);
+          if (r.ok && c.ok) {
+            romanRes = r;
+            courseRes = c;
+            isFound = true;
+            console.log("✅ データを次のパスから読み込みました: " + paths.r);
+            break; // 成功したらループを抜ける
+          }
+        } catch (e) {
+          // fetchエラー（CORS等）は無視して次のパスを試す
+        }
+      }
+
+      if (!isFound) {
+        throw new Error("ファイルが見つかりません(404エラー)。\n\n【よくある原因】\n① JSONファイルの名前が「course.json.txt」になっている (Windowsの拡張子非表示による罠)\n② フォルダ名が大文字の「Data」になっている");
+      }
+
+      // ローマ字テーブルのパース
       const romanText = await romanRes.text();
       romanText.split('\n').forEach(line => {
         line = line.trim();
@@ -346,18 +352,23 @@
         }
       });
 
-      courseData = await courseRes.json();
+      // コースデータのパース（JSONエラーの特定）
+      try {
+        courseData = await courseRes.json();
+      } catch (jsonError) {
+        throw new Error("course.json の書き方に文法エラーがあります。\n最後の項目の末尾に余計なカンマ(,)がないか、または記号が抜けていないか確認してください。\n詳細: " + jsonError.message);
+      }
+
+      // すべて成功したらUIを構築
       buildDropdown();
       if (courseSelect.options.length > 0) loadCourse(courseSelect.options[0].value);
+      
     } catch (error) {
       console.error(error);
-      alert("データの読み込みに失敗しました。\n\n詳細: " + error.message);
+      alert("⚠️ データ読み込みエラー\n\n" + error.message);
     }
   }
 
-  // =========================================================
-  // ★ ヘルパー関数群
-  // =========================================================
   function parseAozora(line) {
     const regex = /(?:[｜|]([^《]+)《([^》]+)》)|([\u4E00-\u9FFF\u3005\u3007]+)《([^》]+)》/g;
     let tokens = [];
@@ -453,9 +464,6 @@
     }, 100);
   }
 
-  // =========================================================
-  // ★ イベントリスナー
-  // =========================================================
   folderInput.addEventListener('change', async (e) => {
     const files = e.target.files;
     let addedCount = 0;
@@ -487,9 +495,6 @@
     settingsPanel.style.display = 'none';
   });
 
-  // =========================================================
-  // ★ モード切替と画面描画
-  // =========================================================
   function loadCourse(courseName) {
     const rawLines = courseData[courseName];
     parsedCourse = rawLines.map(line => {
@@ -535,9 +540,6 @@
     }
   }
 
-  // =========================================================
-  // ★ ゲームモード処理
-  // =========================================================
   function startGame(wordsArray) {
     gameWordsPool = [...wordsArray].sort(() => Math.random() - 0.5);
     gameScore = 0;
@@ -685,8 +687,6 @@
 
   gameInputEl.addEventListener('keydown', function(e) {
     if(gameTimer <= 0) return;
-    
-    // ★ 修正：OSが飲み込んでも反応するように処理
     if (checkModeSwitchKeys(e)) return;
 
     if (e.code === 'CapsLock' || e.key === 'Alphanumeric' || e.code === 'Lang2' || e.key === 'Backspace') {
@@ -703,7 +703,6 @@
     }
   });
 
-  // ★ 追加：keyupでも監視する（WindowsのIME吸収対策）
   gameInputEl.addEventListener('keyup', function(e) {
     if(gameTimer <= 0) return;
     checkModeSwitchKeys(e);
@@ -775,9 +774,6 @@
     `;
   }
 
-  // =========================================================
-  // ★ 通常モード処理
-  // =========================================================
   function renderLines() {
     if (currentIndex >= parsedCourse.length) {
       clearInterval(timerInterval);
@@ -956,7 +952,6 @@
           };
 
           inputField.addEventListener('keydown', (e) => {
-            // ★ 修正：OSが飲み込んでも反応するように処理
             if (checkModeSwitchKeys(e)) return;
 
             if (e.code === 'CapsLock' || e.key === 'Alphanumeric' || e.code === 'Lang2' || e.key === 'Backspace') {
@@ -973,7 +968,6 @@
             }
           });
 
-          // ★ 追加：keyupでも監視する（WindowsのIME吸収対策）
           inputField.addEventListener('keyup', (e) => {
             checkModeSwitchKeys(e);
           });
@@ -1013,7 +1007,6 @@
     }
   }
 
-  // ★ クリックでフォーカスが外れないように、モードインジケーターも除外対象に追加
   document.addEventListener('click', (e) => {
     if (e.target.closest('#toggle-settings') || e.target.closest('#settings-panel') || e.target.closest('.load-btn') || e.target.closest('#mode-indicator')) return;
     
@@ -1032,3 +1025,7 @@
 
 </body>
 </html>
+
+詳細: course.json の書き方に文法エラーがあります。
+最後の項目の末尾に余計なカンマ(,)がないか、または記号が抜けていないか確認してください。
+詳細: JSON.parse: unexpected end of data at line 1 column 1 of the JSON data
