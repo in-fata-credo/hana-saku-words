@@ -290,6 +290,30 @@
       if (activeInput) activeInput.focus();
   };
 
+  // 無変換キーが物理的に ShiftRight として送られてくる環境向け：
+  // 「単独タップ」だけを英語モード切替のトリガーにする（他キーとの同時押しは通常のShiftとして無視）
+  let shiftRightDownTime = 0;
+  let shiftRightModifierUsed = false;
+
+  function handleShiftTapDown(e) {
+      if (e.code === 'ShiftRight') {
+          shiftRightDownTime = performance.now();
+          shiftRightModifierUsed = false;
+      } else if (e.shiftKey) {
+          // Shiftを押しながら他のキーを押した＝通常のモディファイア用途
+          shiftRightModifierUsed = true;
+      }
+  }
+
+  function handleShiftTapUp(e) {
+      if (e.code === 'ShiftRight') {
+          const heldTime = performance.now() - shiftRightDownTime;
+          if (!shiftRightModifierUsed && heldTime < 40) {
+              setInputMode(true);
+          }
+      }
+  }
+
   function checkModeSwitchKeys(e) {
       if (e.code === 'NonConvert' || e.key === 'NonConvert' || e.keyCode === 29) {
           e.preventDefault();
@@ -687,6 +711,7 @@
 
   gameInputEl.addEventListener('keydown', function(e) {
     if(gameTimer <= 0) return;
+    handleShiftTapDown(e);
     if (checkModeSwitchKeys(e)) return;
 
     if (e.code === 'CapsLock' || e.key === 'Alphanumeric' || e.code === 'Lang2' || e.key === 'Backspace') {
@@ -706,6 +731,7 @@
   gameInputEl.addEventListener('keyup', function(e) {
     if(gameTimer <= 0) return;
     checkModeSwitchKeys(e);
+    handleShiftTapUp(e);
   });
 
   function handleGameInputUpdate() {
@@ -952,6 +978,7 @@
           };
 
           inputField.addEventListener('keydown', (e) => {
+            handleShiftTapDown(e);
             if (checkModeSwitchKeys(e)) return;
 
             if (e.code === 'CapsLock' || e.key === 'Alphanumeric' || e.code === 'Lang2' || e.key === 'Backspace') {
@@ -970,6 +997,7 @@
 
           inputField.addEventListener('keyup', (e) => {
             checkModeSwitchKeys(e);
+            handleShiftTapUp(e);
           });
 
           updateVisuals(normalInputValue, normalInputValue); 
