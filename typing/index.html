@@ -188,7 +188,7 @@
   .val { color: var(--text-completed); font-weight: bold; }
 
   /* ============================================================
-     追加：右上パラメータ / 右下データ / 下部キーボードヒートマップ
+     右上パラメータ / 右下データ / 下部キーボードヒートマップ
      ============================================================ */
   body { padding-bottom: 200px; }
 
@@ -316,15 +316,18 @@
     transition: background-color 0.3s ease, color 0.1s, transform 0.1s;
   }
   
-  /* 次に押すべきキーの強調スタイル（赤文字＋文字大） */
+  /* ============================================================
+     ★ 修正：次に押すべきキーの強調スタイル（黒セル＋赤文字＋文字大）
+     ============================================================ */
   .kb-key.next-highlight {
-    color: #e11d48 !important;
+    background-color: #000000 !important;
+    color: #ff3333 !important;
     font-size: 20px !important;
     font-weight: 900 !important;
     transform: scale(1.15);
     z-index: 10;
-    border: 2px solid #e11d48 !important;
-    box-shadow: 0 0 8px rgba(225, 29, 72, 0.2);
+    border: 2px solid #ff3333 !important;
+    box-shadow: 0 0 8px rgba(255, 51, 51, 0.4);
   }
 
   .kb-key .kb-miss-badge {
@@ -455,25 +458,42 @@
   let normalInputValue = "";
   let gameInputValue = "";
 
-  // ============================================================
-  // 追加：速度・正確性・苦手文字・キーヒートマップ用の状態
-  // ============================================================
-  let statsKpm1 = 0;              // 正解ルートの物理キー数
-  let statsKpm2 = 0;              // 実際に押した物理キー総数
-  let statsMistakeConfirmed = 0;  // 赤字確定回数
-  let statsDisplayCharsTotal = 0; // CPM用（画面表記ベースの確定文字数）
-  let statsMoraTotal = 0;         // MPM・確定正確性用（確定モーラ総数）
+  let statsKpm1 = 0;
+  let statsKpm2 = 0;
+  let statsMistakeConfirmed = 0;
+  let statsDisplayCharsTotal = 0;
+  let statsMoraTotal = 0;
 
-  let lastCharStatus = null;      // 直近の描画で見た末尾文字の状態: 'match' | 'state' | 'mistake'
-  let lastActiveTargetChar = null;// 直近描画時に入力中だった対象「かな」1文字
+  let lastCharStatus = null;
+  let lastActiveTargetChar = null;
 
-  let keyStats = {};   // { [物理キー]: {timeSum, timeCount, missCount, pressCount} }
-  let kanaStats = {};  // { [かな]: {timeSum, timeCount, missCount} }
+  let keyStats = {};
+  let kanaStats = {};
 
   let lastKeyTimestamp = null;
-  let skipNextTimingGap = true; // 行/単語の境目や開始直後は「思考時間」として計測を除外
+  let skipNextTimingGap = true;
   
-  let nextExpectedKey = null; // 次に押すべきキー
+  let nextExpectedKey = null;
+
+  // ============================================================
+  // ★ 追加：入力途中の文字列が正しいプレフィックスか判定する関数（NG判定用）
+  // ============================================================
+  function checkValidInputState(extraStr, targetStr) {
+      if (!extraStr) return true;
+      if (!targetStr) return false;
+      
+      let lowerExtra = extraStr.toLowerCase();
+      
+      for (let k in customKeyMap) {
+          let mappedKana = customKeyMap[k];
+          // mappedKanaがターゲット文字列の先頭と一致するか
+          if (targetStr.startsWith(mappedKana)) {
+              // さらに、入力中のローマ字(extraStr)が、そのキー(k)のプレフィックスになっているか
+              if (k.toLowerCase().startsWith(lowerExtra)) return true;
+          }
+      }
+      return false;
+  }
 
   function resetSessionStats() {
     statsKpm1 = 0;
@@ -493,33 +513,55 @@
     updateStatsPanel(0);
   }
 
-  // 次に押すべきキーの推測
-  function updateNextKeyHighlight(targetHiraStr, currentInputStr) {
+  // ============================================================
+  // ★ 修正：次に押すべきキーの推測ロジック（未確定状態も考慮）
+  // ============================================================
+  function updateNextKeyHighlight(targetHiraStr, val) {
     if (nextExpectedKey) {
         const prevEl = document.getElementById('kb-key-' + nextExpectedKey);
         if (prevEl) prevEl.classList.remove('next-highlight');
     }
 
     nextExpectedKey = null;
-    if (!targetHiraStr || currentInputStr.length >= targetHiraStr.length) return;
+    let matchVal = normalizeForMatch(val);
+    let matchTarget = targetHiraStr;
+    
+    let matchLen = 0;
+    for (let i = 0; i < matchVal.length; i++) {
+        if (/[ァ-ヶ]/.test(matchVal[i]) && matchVal[i] !== 'ー') break;
+        if (matchVal[i] === matchTarget[i]) matchLen++;
+        else break;
+    }
 
-    let nextKana = targetHiraStr[currentInputStr.length];
-    if(!nextKana) return;
+    if (!matchTarget || matchLen >= matchTarget.length) return;
 
+    // 現在未確定の入力途中文字列 (例：「か」を打とうとして「k」まで打った状態)
+    let extraStr = matchVal.substring(matchLen).toLowerCase();
+    let remainingTarget = matchTarget.substring(matchLen);
+
+    let bestKey = null;
     for (let k in customKeyMap) {
-        if (customKeyMap[k] === nextKana || customKeyMap[k].startsWith(nextKana)) {
-            nextExpectedKey = k[0].toLowerCase();
-            break;
+        let mappedKana = customKeyMap[k];
+        if (remainingTarget.startsWith(mappedKana)) {
+            // customKeyMapのキーが、今の未確定文字列(extraStr)から始まっている場合
+            if (k.toLowerCase().startsWith(extraStr)) {
+                // extraStrの次に来るべき1文字を特定する
+                let nextChar = k[extraStr.length];
+                if (nextChar) {
+                    bestKey = nextChar.toLowerCase();
+                    break;
+                }
+            }
         }
     }
 
-    if (nextExpectedKey) {
+    if (bestKey) {
+        nextExpectedKey = bestKey;
         const nextEl = document.getElementById('kb-key-' + nextExpectedKey);
         if (nextEl) nextEl.classList.add('next-highlight');
     }
   }
 
-  // 拗音（ゃゅょ）は直前の文字と合わせて1モーラとして数える
   function countMora(str) {
     if (!str) return 0;
     let count = 0;
@@ -530,7 +572,6 @@
     return count;
   }
 
-  // 1行/1単語ぶんの「画面表記文字数」と「モーラ数」を計算
   function computeLineMetrics(parsed) {
     let displayChars = 0;
     let moraCount = 0;
@@ -542,7 +583,6 @@
     return { displayChars, moraCount };
   }
 
-  // 1回分の打鍵を記録（デリミタ/デリート以外の実際の文字入力キー）
   function recordKeystroke(rawKey) {
     const now = performance.now();
     let delta = null;
@@ -578,7 +618,6 @@
     }
   }
 
-  // デリート系キー（バックスペース・CapsLock等）：KPM2にのみ反映
   function recordDeletion() {
     statsKpm2++;
     lastKeyTimestamp = performance.now();
@@ -657,7 +696,6 @@
     listEl.innerHTML = html;
   }
 
-  // US配列ベースのキーボードレイアウト（HSW配列の物理キーはローマ字入力と同じ位置なのでこれで代用）
   const KEYBOARD_ROWS = [
     ['1','2','3','4','5','6','7','8','9','0','-'],
     ['q','w','e','r','t','y','u','i','o','p'],
@@ -668,8 +706,7 @@
   function timeToColor(t, minT, maxT) {
     if (t === null || maxT <= minT) return '#eee';
     const ratio = Math.max(0, Math.min(1, (t - minT) / (maxT - minT)));
-    // 緑（速い）→ 黄 → 赤（遅い）
-    const hue = (1 - ratio) * 120; // 120=緑, 0=赤
+    const hue = (1 - ratio) * 120;
     return `hsl(${hue}, 65%, 70%)`;
   }
 
@@ -722,8 +759,6 @@
       if (activeInput) activeInput.focus();
   };
 
-  // 無変換キーが物理的に ShiftRight として送られてくる環境向け：
-  // 「単独タップ」だけを英語モード切替のトリガーにする（他キーとの同時押しは通常のShiftとして無視）
   let shiftRightDownTime = 0;
   let shiftRightModifierUsed = false;
 
@@ -732,7 +767,6 @@
           shiftRightDownTime = performance.now();
           shiftRightModifierUsed = false;
       } else if (e.shiftKey) {
-          // Shiftを押しながら他のキーを押した＝通常のモディファイア用途
           shiftRightModifierUsed = true;
       }
   }
@@ -760,16 +794,12 @@
       return false;
   }
 
-  // =========================================================
-  // 🚀 強化版：パス自動探索 ＆ エラー詳細出力機能
-  // =========================================================
   async function initApp() {
     try {
-      // 考えられるすべてのファイル位置を定義して、順番に探す
       const pathCandidates = [
-        { r: 'data/romantable.txt', c: 'data/course.json' },         // パターンB: typing/data/ にある場合
-        { r: '../data/romantable.txt', c: '../data/course.json' },   // パターンA: 1つ上の階層にある場合
-        { r: '/hana-saku-words/data/romantable.txt', c: '/hana-saku-words/data/course.json' } // 絶対パス
+        { r: 'data/romantable.txt', c: 'data/course.json' },
+        { r: '../data/romantable.txt', c: '../data/course.json' },
+        { r: '/hana-saku-words/data/romantable.txt', c: '/hana-saku-words/data/course.json' }
       ];
 
       let romanRes = null, courseRes = null;
@@ -784,18 +814,15 @@
             courseRes = c;
             isFound = true;
             console.log("✅ データを次のパスから読み込みました: " + paths.r);
-            break; // 成功したらループを抜ける
+            break;
           }
-        } catch (e) {
-          // fetchエラー（CORS等）は無視して次のパスを試す
-        }
+        } catch (e) {}
       }
 
       if (!isFound) {
         throw new Error("ファイルが見つかりません(404エラー)。\n\n【よくある原因】\n① JSONファイルの名前が「course.json.txt」になっている (Windowsの拡張子非表示による罠)\n② フォルダ名が大文字の「Data」になっている");
       }
 
-      // ローマ字テーブルのパース
       const romanText = await romanRes.text();
       romanText.split('\n').forEach(line => {
         line = line.trim();
@@ -808,14 +835,12 @@
         }
       });
 
-      // コースデータのパース（JSONエラーの特定）
       try {
         courseData = await courseRes.json();
       } catch (jsonError) {
         throw new Error("course.json の書き方に文法エラーがあります。\n最後の項目の末尾に余計なカンマ(,)がないか、または記号が抜けていないか確認してください。\n詳細: " + jsonError.message);
       }
 
-      // すべて成功したらUIを構築
       buildDropdown();
       if (courseSelect.options.length > 0) loadCourse(courseSelect.options[0].value);
       
@@ -1116,13 +1141,14 @@
             
             let extra = remainingVal.substring(currentMatch);
             let frameLastStatus = 'match';
+            
+            // ★ 修正：入力途中文字列の正当性判定
+            let remainingTarget = matchTarget.substring(matchLen);
+            let isValid = checkValidInputState(extra, remainingTarget);
+
             for (let j = 0; j < extra.length; j++) {
               let char = extra[j];
-              let targetChar = currentWordObj.targetLine[matchLen + j];
-              if (targetChar && hiraToKata(char) === targetChar) char = targetChar;
-              if (targetChar && char.toLowerCase() === targetChar.toLowerCase()) char = targetChar;
-              
-              if (/[ァ-ヶA-Za-z0-9ー]/.test(char) || isBridgeChar(char, targetChar)) {
+              if (isValid) {
                 typedText += `<span class="state">${escapeHTML(char)}</span>`;
                 frameLastStatus = 'state';
               } else {
@@ -1359,13 +1385,14 @@
                 
                 let extra = remainingVal.substring(currentMatch);
                 let frameLastStatus = 'match';
+                
+                // ★ 修正：入力途中文字列の正当性判定
+                let remainingTarget = matchTarget.substring(matchLen);
+                let isValid = checkValidInputState(extra, remainingTarget);
+
                 for (let j = 0; j < extra.length; j++) {
                   let char = extra[j];
-                  let targetChar = parsed.targetLine[matchLen + j];
-                  if (targetChar && hiraToKata(char) === targetChar) char = targetChar;
-                  if (targetChar && char.toLowerCase() === targetChar.toLowerCase()) char = targetChar;
-                  
-                  if (/[ァ-ヶA-Za-z0-9ー]/.test(char) || isBridgeChar(char, targetChar)) {
+                  if (isValid) {
                     typedText += `<span class="state">${escapeHTML(char)}</span>`;
                     frameLastStatus = 'state';
                   } else {
