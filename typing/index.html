@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>花咲く言葉 (HSW配列) - タイピングプラクティス v28.02</title>
+<title>花咲く言葉 (HSW配列) - タイピングプラクティス v28.03</title>
 <style>
   :root {
     --bg-color: #fcfbf9; 
@@ -47,7 +47,7 @@
     transition: color 0.2s;
   }
   .settings-btn:hover { color: var(--text-active-prompt); }
-  
+
   #settings-panel {
     display: none;
     background: #ffffff;
@@ -290,9 +290,7 @@
     transition: background-color 0.3s ease, color 0.1s, transform 0.1s;
   }
   
-  /* ============================================================
-     ★ 次に押すべきキーの強調スタイル（黒セル＋赤文字＋文字大）
-     ============================================================ */
+  /* 次に押すべきキーの強調スタイル（黒セル＋赤文字＋文字大） */
   .kb-key.next-highlight {
     background-color: #000000 !important;
     color: #ff3333 !important;
@@ -326,7 +324,7 @@
 <body>
 
 <div class="header">
-  <h2>✿ 花咲く言葉 - タイピングの庭 v28.02</h2>
+  <h2>✿ 花咲く言葉 - タイピングの庭 v28.03</h2>
   <button class="settings-btn" id="toggle-settings" title="設定・コース選択">⚙️</button>
 </div>
 
@@ -446,141 +444,95 @@
   let nextExpectedKey = null;
 
   // ============================================================
-  // ★ ルート探索：customKeyMapから「ある『かな』に到達できる全ての中間状態」を逆算
+  // ★ ルート探索・次キー推測・NG判定用 キャッシュと関数群
   // ============================================================
-  let validPrefixCache = {};
+  let searchCache = {};
+  let validMapPrefixes = new Set();
+  let validKeyChars = [];
 
-  function getValidEvaluatedStates(targetStr) {
-      if (!targetStr) return new Set();
-      let target = targetStr.substring(0, 2); 
-      if (validPrefixCache[target]) return validPrefixCache[target];
+  // アプリ起動時にcustomKeyMapから検索用データを構築
+  function initSearchCaches() {
+      validMapPrefixes.clear();
+      let physicalKeys = new Set();
+      for (let k in customKeyMap) {
+          // 物理的に叩ける（長さ1の非カタカナ/ひらがな）キーを抽出
+          if (k.length === 1 && !/[ァ-ヶぁ-ん]/.test(k)) {
+              physicalKeys.add(k.toLowerCase());
+          }
+          // 有効なプレフィックスを全て抽出（枝刈り用）
+          for (let i = 1; i <= k.length; i++) {
+              validMapPrefixes.add(k.substring(0, i));
+          }
+      }
+      // 保険として標準的なキーボード文字を登録
+      "abcdefghijklmnopqrstuvwxyz-.,;:/@+*<>?1234567890".split('').forEach(c => physicalKeys.add(c));
+      validKeyChars = Array.from(physicalKeys);
+      searchCache = {};
+  }
 
-      let validStates = new Set();
-      validStates.add("");
+  // BFS（幅優先探索）を用いて「現在の入力状態から目標に到達できるか」と「次に打つべきキー」を高速で割り出す
+  function findNextKeyAndValidity(buffer, remainingTargetHira) {
+      if (!remainingTargetHira) return { isValid: true, nextKey: null };
+
+      // 探索の深さを制限するため、目標プレフィックスを先頭4文字に絞る
+      let targetPrefix = remainingTargetHira.substring(0, 4);
+      let cacheKey = buffer + "|" + targetPrefix;
+      if (searchCache[cacheKey]) return searchCache[cacheKey];
+
+      let queue = [ { text: buffer, path: [] } ];
+      let visited = new Set();
+      visited.add(buffer);
       
-      let queue = [target, targetStr.charAt(0)]; 
-      let visited = new Set(queue);
+      let isValid = false;
+      let nextKey = null;
 
-      // BFSで逆算：例えば「ま」なら「マa」→「ナa」のように遡り、全ての中間状態を記録
       while(queue.length > 0) {
           let curr = queue.shift();
-          validStates.add(curr);
-
-          // その状態のプレフィックス（例："マa"なら"マ"）も正当な途中経過
-          for(let i=1; i<=curr.length; i++) {
-              validStates.add(curr.substring(0, i));
+          let norm = normalizeForMatch(curr.text);
+          
+          let isPrefix = (norm.length > 0 && targetPrefix.startsWith(norm));
+          
+          if (isPrefix) {
+              // 探索によって入力状態が進み、かつ目標に合致した場合
+              if (curr.text !== buffer) {
+                  isValid = true;
+                  nextKey = curr.path[0];
+                  break;
+              } else if (curr.path.length === 0) {
+                  // 最初から合致している場合（これ自体は有効だが、次キーを探すため探索は続行）
+                  isValid = true;
+              }
           }
+          
+          // 深さ制限（HSWなら5手以内で必ずカタカナや平仮名に収束する）
+          if (curr.path.length >= 5) continue;
 
-          for (let k in customKeyMap) {
-              // マップの変換結果がcurrに一致、またはcurrから始まる場合
-              if (customKeyMap[k] === curr || customKeyMap[k].startsWith(curr)) {
-                  if (!visited.has(k)) {
-                      visited.add(k);
-                      queue.push(k);
+          // 大幅な枝刈り：現在プレフィックスに合致しておらず、かつサフィックスがcustomKeyMapに存在しないなら見込み無し
+          if (!isPrefix) {
+              let hasValidSuffix = false;
+              for (let len = 1; len <= Math.min(curr.text.length, 6); len++) {
+                  let suffix = curr.text.slice(-len);
+                  if (validMapPrefixes.has(suffix)) {
+                      hasValidSuffix = true;
+                      break;
                   }
               }
+              if (!hasValidSuffix && curr.text !== "") continue;
           }
-      }
-      
-      // 直接ローマ字入力等のフォールバック
-      for (let k in customKeyMap) {
-          if (customKeyMap[k] === target || customKeyMap[k] === targetStr.charAt(0)) {
-              for(let i=1; i<=k.length; i++) validStates.add(k.substring(0, i));
-          }
-      }
 
-      validPrefixCache[target] = validStates;
-      return validStates;
-  }
-
-  // ============================================================
-  // ★ 入力途中の文字列が正しいルート（ナ→マ→ま など）に乗っているか判定
-  // ============================================================
-  function checkValidInputState(extraStr, remainingTarget) {
-      if (!extraStr) return true;
-      if (!remainingTarget) return false;
-      
-      let target1 = remainingTarget.substring(0, 1);
-      let target2 = remainingTarget.substring(0, 2);
-      
-      let valid1 = getValidEvaluatedStates(target1);
-      let valid2 = getValidEvaluatedStates(target2);
-      
-      // 中間状態（例：ナ）が逆算した正当ルート上に存在していればOK（赤字にしない）
-      if (valid1.has(extraStr) || valid2.has(extraStr)) return true;
-      
-      if (remainingTarget.startsWith(extraStr)) return true;
-      let normalizedExtra = normalizeForMatch(extraStr);
-      if (remainingTarget.startsWith(normalizedExtra)) return true;
-
-      return false;
-  }
-
-  // ============================================================
-  // ★ 次に押すべきキーの推測（中間状態からの推測に対応）
-  // ============================================================
-  function getNextExpectedKey(currentBuffer, targetStr) {
-      if (!targetStr) return null;
-      let target1 = targetStr.substring(0, 1);
-      let target2 = targetStr.substring(0, 2);
-      
-      let valid1 = getValidEvaluatedStates(target1);
-      let valid2 = getValidEvaluatedStates(target2);
-      let validStates = new Set([...valid1, ...valid2]);
-
-      // 現在のバッファ（例：ナ）に a〜z を足して、正当なルートに進めるキーを探す
-      const candidates = "abcdefghijklmnopqrstuvwxyz,.-;1234567890".split('');
-      for (let c of candidates) {
-          let nextState = currentBuffer + c;
-          let evaluated = applyCustomIME(nextState);
-          
-          if (validStates.has(evaluated) && evaluated !== currentBuffer) {
-              return c;
-          }
-          if (validStates.has(nextState)) {
-              return c;
-          }
-      }
-      
-      // バッファが空の時は最初の1打目を探す
-      if (currentBuffer === "") {
-          for (let state of validStates) {
-              if (state.length === 1 && candidates.includes(state)) {
-                  return state;
+          // 次の物理キーを1つ足してシミュレーション
+          for (let c of validKeyChars) {
+              let nextText = applyCustomIME(curr.text + c);
+              if (!visited.has(nextText)) {
+                  visited.add(nextText);
+                  queue.push({ text: nextText, path: [...curr.path, c] });
               }
           }
       }
-      return null;
-  }
-
-  function updateNextKeyHighlight(targetHiraStr, val) {
-      if (nextExpectedKey) {
-          const prevEl = document.getElementById('kb-key-' + nextExpectedKey);
-          if (prevEl) prevEl.classList.remove('next-highlight');
-      }
-
-      nextExpectedKey = null;
-      let matchVal = normalizeForMatch(val);
-      let matchTarget = targetHiraStr;
       
-      let matchLen = 0;
-      for (let i = 0; i < matchVal.length; i++) {
-          if (/[ァ-ヶ]/.test(matchVal[i]) && matchVal[i] !== 'ー') break;
-          if (matchVal[i] === matchTarget[i]) matchLen++;
-          else break;
-      }
-
-      if (!matchTarget || matchLen >= matchTarget.length) return;
-
-      let extraStr = matchVal.substring(matchLen);
-      let remainingTarget = matchTarget.substring(matchLen);
-
-      let nextKey = getNextExpectedKey(extraStr, remainingTarget);
-      if (nextKey) {
-          nextExpectedKey = nextKey.toLowerCase();
-          const nextEl = document.getElementById('kb-key-' + nextExpectedKey);
-          if (nextEl) nextEl.classList.add('next-highlight');
-      }
+      let result = { isValid, nextKey };
+      searchCache[cacheKey] = result;
+      return result;
   }
 
   function resetSessionStats() {
@@ -784,12 +736,6 @@
       isEnglishMode = isEnglish;
   }
 
-  window.toggleInputMode = function() {
-      setInputMode(!isEnglishMode);
-      const activeInput = document.querySelector('.real-input:focus') || document.querySelector('.real-input') || document.getElementById('game-real-input');
-      if (activeInput) activeInput.focus();
-  };
-
   let shiftRightDownTime = 0;
   let shiftRightModifierUsed = false;
 
@@ -865,6 +811,9 @@
           if (key && val) customKeyMap[key] = val;
         }
       });
+      
+      // BFS用キャッシュの初期化
+      initSearchCaches();
 
       try {
         courseData = await courseRes.json();
@@ -937,16 +886,6 @@
 
   function normalizeForMatch(str) {
       return zenkakuToHankaku(kataToHira(str)).toLowerCase();
-  }
-
-  function isBridgeChar(char, targetChar) {
-    if (!char || !targetChar) return false;
-    for (const key in customKeyMap) {
-      if (key.length === char.length + 1 && key.charAt(0) === char && customKeyMap[key] === targetChar) {
-        return true;
-      }
-    }
-    return false;
   }
 
   function applyCustomIME(inputStr) {
@@ -1114,12 +1053,10 @@
 
     let matchVal = normalizeForMatch(val);
     let matchTarget = normalizeForMatch(currentWordObj.targetLineHira);
-    
-    updateNextKeyHighlight(matchTarget, matchVal);
 
     let matchLen = 0;
     for (let i = 0; i < matchVal.length; i++) {
-        if (/[ァ-ヶ]/.test(matchVal[i]) && matchVal[i] !== 'ー') {
+        if (/[ァ-ヶ]/.test(rawVal[i]) && rawVal[i] !== 'ー') {
             break;
         }
         if (matchVal[i] === matchTarget[i]) matchLen++;
@@ -1173,9 +1110,23 @@
             let extra = remainingVal.substring(currentMatch);
             let frameLastStatus = 'match';
             
+            // ★ AI推測・NG判定ロジックの統合
             let remainingTarget = matchTarget.substring(matchLen);
-            let isValid = checkValidInputState(extra, remainingTarget);
+            let searchResult = findNextKeyAndValidity(extra, remainingTarget);
+            let isValid = searchResult.isValid;
 
+            // ハイライト更新
+            if (nextExpectedKey) {
+                const prevEl = document.getElementById('kb-key-' + nextExpectedKey);
+                if (prevEl) prevEl.classList.remove('next-highlight');
+            }
+            nextExpectedKey = searchResult.nextKey ? searchResult.nextKey.toLowerCase() : null;
+            if (nextExpectedKey) {
+                const nextEl = document.getElementById('kb-key-' + nextExpectedKey);
+                if (nextEl) nextEl.classList.add('next-highlight');
+            }
+
+            // 描画（BFSの判定に基づく）
             for (let j = 0; j < extra.length; j++) {
               let char = extra[j];
               if (isValid) {
@@ -1356,8 +1307,6 @@
 
             let matchVal = normalizeForMatch(val);
             let matchTarget = normalizeForMatch(parsed.targetLineHira);
-            
-            updateNextKeyHighlight(matchTarget, matchVal);
 
             let matchLen = 0;
             for (let i = 0; i < matchVal.length; i++) {
@@ -1416,9 +1365,23 @@
                 let extra = remainingVal.substring(currentMatch);
                 let frameLastStatus = 'match';
                 
+                // ★ AI推測・NG判定ロジックの統合
                 let remainingTarget = matchTarget.substring(matchLen);
-                let isValid = checkValidInputState(extra, remainingTarget);
+                let searchResult = findNextKeyAndValidity(extra, remainingTarget);
+                let isValid = searchResult.isValid;
 
+                // ハイライト更新
+                if (nextExpectedKey) {
+                    const prevEl = document.getElementById('kb-key-' + nextExpectedKey);
+                    if (prevEl) prevEl.classList.remove('next-highlight');
+                }
+                nextExpectedKey = searchResult.nextKey ? searchResult.nextKey.toLowerCase() : null;
+                if (nextExpectedKey) {
+                    const nextEl = document.getElementById('kb-key-' + nextExpectedKey);
+                    if (nextEl) nextEl.classList.add('next-highlight');
+                }
+
+                // 描画（BFSの判定に基づく）
                 for (let j = 0; j < extra.length; j++) {
                   let char = extra[j];
                   if (isValid) {
@@ -1488,7 +1451,7 @@
               const { displayChars, moraCount } = computeLineMetrics(parsed);
               statsDisplayCharsTotal += displayChars;
               statsMoraTotal += moraCount;
-              skipNextTimingGap = true; 
+              skipNextTimingGap = true; // 次の行の最初の1打は「思考時間」なので計測除外
               currentIndex++;
               renderLines();
               
