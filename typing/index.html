@@ -254,15 +254,16 @@
     font-style: normal;
     margin-left: 5px;
   }
+  /* 元のツールチップ本文は非表示のまま保持し、内容だけJSで共有ツールチップに
+     コピーする(.side-columnがoverflow-y:autoになったことで、通常のabsolute
+     配置のツールチップだと親の外にはみ出す部分が見切れてしまうため)。 */
   .info-tooltip {
-    visibility: hidden;
-    opacity: 0;
-    pointer-events: none;
-    transition: opacity 0.15s ease;
-    position: absolute;
-    z-index: 100;
-    top: 0;
-    right: calc(100% + 10px);
+    display: none;
+  }
+  #shared-tooltip {
+    display: none;
+    position: fixed;
+    z-index: 200;
     width: 300px;
     background: #333333;
     color: #fdfdfc;
@@ -271,28 +272,17 @@
     padding: 14px 16px;
     border-radius: 8px;
     box-shadow: 0 6px 20px rgba(0,0,0,0.25);
-    white-space: normal;
     text-align: left;
+    pointer-events: none;
   }
-  .info-tooltip strong {
+  #shared-tooltip strong {
     color: #f4e6c1;
   }
-  .info-tooltip .formula {
+  #shared-tooltip .formula {
     display: block;
     color: #c8e6a0;
     margin: 4px 0;
     font-family: monospace;
-  }
-  .info-icon-wrap:hover .info-tooltip {
-    visibility: visible;
-    opacity: 1;
-  }
-  #keyboard-heatmap-title .info-tooltip {
-    top: auto;
-    bottom: calc(100% + 10px);
-    right: auto;
-    left: 50%;
-    transform: translateX(-50%);
   }
 
   #mistake-sidebar {
@@ -1324,6 +1314,7 @@
       e.preventDefault();
       gameInputValue += e.key;
       handleGameInputUpdate();
+      recordKeystroke(e.key);
     }
   });
 
@@ -1674,6 +1665,51 @@
        const activeInput = document.querySelector('#text-container .real-input');
        if (activeInput) activeInput.focus();
     }
+  });
+
+  // ★ 共有ツールチップ(position:fixed)
+  // .side-columnがoverflow-y:autoでスクロール可能になったため、通常の
+  // position:absoluteなツールチップだと親要素の外にはみ出す部分が
+  // クリップされて見切れてしまう。document.body直下のfixed要素を
+  // 1つ用意し、ホバー時に内容とpositionをJSで反映する。
+  const sharedTooltip = document.createElement('div');
+  sharedTooltip.id = 'shared-tooltip';
+  document.body.appendChild(sharedTooltip);
+
+  function positionSharedTooltip(wrapEl) {
+    const r = wrapEl.getBoundingClientRect();
+    const margin = 8;
+    // 表示済み(display:block)の実測サイズを使う。固定値だとpadding分の
+    // ズレなどで画面外にはみ出すことがあるため。
+    const ttWidth = sharedTooltip.offsetWidth || 300;
+    const ttHeight = sharedTooltip.offsetHeight || 200;
+    const clampX = (x) => Math.max(margin, Math.min(x, window.innerWidth - ttWidth - margin));
+    const clampY = (y) => Math.max(margin, Math.min(y, window.innerHeight - ttHeight - margin));
+
+    if (wrapEl.closest('#keyboard-heatmap-title')) {
+      sharedTooltip.style.left = clampX(r.left + r.width / 2 - ttWidth / 2) + 'px';
+      sharedTooltip.style.top = 'auto';
+      sharedTooltip.style.bottom = Math.max(margin, window.innerHeight - r.top + 10) + 'px';
+    } else {
+      sharedTooltip.style.bottom = 'auto';
+      let left = r.left - ttWidth - 10;
+      if (left < margin) left = r.right + 10;
+      sharedTooltip.style.left = clampX(left) + 'px';
+      sharedTooltip.style.top = clampY(r.top) + 'px';
+    }
+  }
+
+  document.querySelectorAll('.info-icon-wrap').forEach(wrap => {
+    const content = wrap.querySelector('.info-tooltip');
+    if (!content) return;
+    wrap.addEventListener('mouseenter', () => {
+      sharedTooltip.innerHTML = content.innerHTML;
+      sharedTooltip.style.display = 'block';
+      positionSharedTooltip(wrap);
+    });
+    wrap.addEventListener('mouseleave', () => {
+      sharedTooltip.style.display = 'none';
+    });
   });
 
   initApp();
