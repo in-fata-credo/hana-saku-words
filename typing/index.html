@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>花咲く言葉 (HSW配列) - タイピングプラクティス β版 v1.00</title>
+<title>花咲く言葉 (HSW配列) - タイピングプラクティス β版 v1.01</title>
 <style>
   :root {
     --bg-color: #fcfbf9; 
@@ -19,9 +19,37 @@
     font-family: "Yu Mincho", "Shippori Mincho", "Noto Serif JP", serif;
     background-color: var(--bg-color);
     color: var(--text-completed);
-    max-width: 1000px;
+    max-width: 1260px;
     margin: 0 auto;
     padding: 60px 30px;
+    overflow-y: auto;
+  }
+  /* 本文とインジケータを実際の2カラムレイアウトにする。
+     画面が狭い場合は折り返してインジケータが本文の下に来るだけで、
+     固定配置のように画面外へ消えたり隠れたりすることが無くなる。 */
+  .main-layout {
+    display: flex;
+    align-items: flex-start;
+    gap: 30px;
+    flex-wrap: wrap;
+  }
+  .main-content {
+    flex: 1 1 500px;
+    min-width: 0;
+    max-width: 1000px;
+  }
+  .side-column {
+    flex: 0 0 210px;
+    width: 210px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    position: sticky;
+    top: 90px;
+    /* パネルを合計するとビューポートより高くなることがあり、
+       その場合は下側(苦手な文字など)が画面外に見切れてしまう。
+       カラム全体を画面内に収め、はみ出す分はスクロールで見られるようにする。 */
+    max-height: calc(100vh - 110px);
     overflow-y: auto;
   }
   
@@ -30,6 +58,12 @@
     justify-content: space-between;
     align-items: center;
     margin-bottom: 20px;
+    position: sticky;
+    top: 0;
+    z-index: 50;
+    background-color: var(--bg-color);
+    padding: 16px 0;
+    margin-top: -16px;
   }
   h2 {
     color: var(--status-text);
@@ -56,6 +90,12 @@
     margin-bottom: 40px;
     border: 1px solid var(--border-line);
     box-shadow: 0 4px 15px rgba(0,0,0,0.02);
+    /* ヘッダーがスティッキーになったため、下にスクロールした状態で歯車を
+       押すと、通常の配置のままではページ上部(見えない位置)に開いてしまう。
+       ヘッダーの直下に付くようにこちらもスティッキーにする。 */
+    position: sticky;
+    top: 66px;
+    z-index: 45;
   }
   select {
     width: 100%;
@@ -156,22 +196,13 @@
   }
   @keyframes blink { 50% { opacity: 0; } }
 
-  .status-bar {
-    display: flex; justify-content: space-between; padding-top: 25px; padding-bottom: 25px; font-size: 20px; color: var(--status-text); border-top: 1px solid var(--border-line); position: sticky; bottom: 0; background-color: rgba(252, 251, 249, 0.95); z-index: 10; font-family: sans-serif;
-  }
-  .val { color: var(--text-completed); font-weight: bold; }
 
   body { padding-bottom: 200px; }
 
   #stats-sidebar {
-    position: fixed;
-    top: 90px;
-    right: 20px;
-    width: 210px;
     display: flex;
     flex-direction: column;
     gap: 12px;
-    z-index: 30;
     font-family: sans-serif;
   }
   .side-panel {
@@ -265,11 +296,6 @@
   }
 
   #mistake-sidebar {
-    position: fixed;
-    bottom: 160px;
-    right: 20px;
-    width: 210px;
-    z-index: 30;
     font-family: sans-serif;
   }
   #mistake-list {
@@ -304,12 +330,16 @@
   #keyboard-heatmap-wrapper {
     position: fixed;
     bottom: 0;
-    left: 0;
-    width: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    width: auto;
+    max-width: 680px;
     background: rgba(255,255,255,0.97);
-    border-top: 1px solid var(--border-line);
+    border: 1px solid var(--border-line);
+    border-bottom: none;
+    border-radius: 12px 12px 0 0;
     box-shadow: 0 -4px 15px rgba(0,0,0,0.04);
-    padding: 10px 0 12px;
+    padding: 10px 20px 12px;
     z-index: 40;
     font-family: sans-serif;
   }
@@ -372,15 +402,15 @@
     box-shadow: 0 0 8px rgba(255, 51, 51, 0.4);
   }
 
-  @media (max-width: 1300px) {
-    #stats-sidebar, #mistake-sidebar { display: none; }
+  @media (max-width: 850px) {
+    .side-column { position: static; width: 100%; flex-basis: 100%; }
   }
 </style>
 </head>
 <body>
 
 <div class="header">
-  <h2>✿ 花咲く言葉 - タイピングの庭 β版 v1.00</h2>
+  <h2>✿ 花咲く言葉 - タイピングの庭 β版 v1.01</h2>
   <button class="settings-btn" id="toggle-settings" title="設定・コース選択">⚙️</button>
 </div>
 
@@ -395,6 +425,9 @@
     <input type="file" id="folder-input" webkitdirectory directory multiple style="display: none;">
   </div>
 </div>
+
+<div class="main-layout">
+<div class="main-content">
 
 <div id="text-container"></div>
 
@@ -418,13 +451,14 @@
    </div>
 </div>
 
-<div class="status-bar">
-  <div>進捗: <span id="progress" class="val">0 / 0</span></div>
-  <div>時間: <span id="time" class="val">0.0s</span></div>
-  <div>CPM: <span id="kpm" class="val">0</span></div>
 </div>
 
+<div class="side-column">
 <div id="stats-sidebar">
+  <div class="side-panel">
+    <div class="metric-row"><span>進捗</span><span class="metric-value" id="stat-progress">0 / 0</span></div>
+    <div class="metric-row"><span>時間</span><span class="metric-value" id="stat-time">0.0s</span></div>
+  </div>
   <div class="side-panel">
     <div class="side-panel-title">速度
       <span class="info-icon-wrap"><span class="info-icon">?</span><span class="info-tooltip">
@@ -470,6 +504,9 @@
     <div id="mistake-list">まだデータがありません</div>
   </div>
 </div>
+</div>
+
+</div>
 
 <div id="keyboard-heatmap-wrapper">
   <div id="keyboard-heatmap-title">キー別ヒートマップ（色 = 速度 / 赤バッジ = ミス回数）
@@ -498,10 +535,17 @@
   const settingsPanel = document.getElementById('settings-panel');
   const courseSelect = document.getElementById('course-select');
   const textContainer = document.getElementById('text-container');
-  const progressSpan = document.getElementById('progress');
-  const timeSpan = document.getElementById('time');
-  const kpmSpan = document.getElementById('kpm');
+  const statProgressSpan = document.getElementById('stat-progress');
+  const statTimeSpan = document.getElementById('stat-time');
   const folderInput = document.getElementById('folder-input');
+
+  // 進捗/時間はインジケータ欄にのみ表示する
+  function setProgressText(text) {
+    statProgressSpan.textContent = text;
+  }
+  function setTimeText(text) {
+    statTimeSpan.textContent = text;
+  }
 
   let parsedCourse = [];
   let currentIndex = 0;
@@ -990,8 +1034,7 @@
     clearInterval(timerInterval);
     timerInterval = setInterval(() => {
       const elapsed = (Date.now() - startTime) / 1000;
-      timeSpan.textContent = elapsed.toFixed(1) + 's';
-      if (elapsed > 0) kpmSpan.textContent = Math.round(totalChars / (elapsed / 60));
+      setTimeText(elapsed.toFixed(1) + 's');
       updateStatsPanel(elapsed);
       renderHeatmap();
       renderMistakeList();
@@ -1054,9 +1097,8 @@
       clearInterval(gameInterval);
       resetSessionStats();
       
-      timeSpan.textContent = '0.0s';
-      kpmSpan.textContent = '0';
-      
+      setTimeText('0.0s');
+
       textContainer.innerHTML = '';
       parsedCourse.forEach((parsed, index) => {
         const blockDiv = document.createElement('div');
@@ -1097,8 +1139,7 @@
       document.getElementById('game-time-text').innerText = gameTimer.toFixed(1);
       document.getElementById('game-timer-fill').style.width = (gameTimer / 60 * 100) + '%';
       
-      timeSpan.textContent = elapsed.toFixed(1) + 's';
-      if(elapsed > 0) kpmSpan.textContent = Math.round(totalChars / (elapsed / 60));
+      setTimeText(elapsed.toFixed(1) + 's');
       updateStatsPanel(elapsed);
       renderHeatmap();
       renderMistakeList();
@@ -1619,7 +1660,7 @@
 
   function updateStatus() {
     if(parsedCourse && parsedCourse.length > 0) {
-        progressSpan.textContent = `${currentIndex} / ${parsedCourse.length}`;
+        setProgressText(`${currentIndex} / ${parsedCourse.length}`);
     }
   }
 
