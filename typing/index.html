@@ -299,7 +299,6 @@
     text-align: center;
   }
 
-  /* ★ 次に押すべきキーの強調スタイル（黒セル＋赤文字＋文字大） */
   .kb-key.next-highlight {
     background-color: #000000 !important;
     color: #ff3333 !important;
@@ -441,24 +440,17 @@
   // ============================================================
   let recipeCache = {};
   let validKeyChars = [];
-  let validMapPrefixes = new Set(); // ★ 無効なキー（存在しない子音）の判定用
-  let strictPrefixes = new Set();
-  
+  let validMapPrefixes = new Set(); 
+
   function initSearchCaches() {
       validMapPrefixes.clear();
-      strictPrefixes.clear();
       let physicalKeys = new Set();
       for (let k in customKeyMap) {
           if (k.length === 1 && !/[ァ-ヶぁ-ん]/.test(k)) {
               physicalKeys.add(k.toLowerCase());
           }
-          // 配列定義のプレフィックスを全て登録
           for(let i = 1; i <= k.length; i++) {
               validMapPrefixes.add(k.substring(0, i));
-          }
-          // ★追加：自分より長いキーが存在する「途中までの文字列」だけを登録
-          for(let i = 1; i < k.length; i++) {
-              strictPrefixes.add(k.substring(0, i));
           }
       }
       "abcdefghijklmnopqrstuvwxyz-.,;:/@+*<>?1234567890".split('').forEach(c => physicalKeys.add(c));
@@ -466,24 +458,25 @@
       recipeCache = {};
   }
 
-  // 指定した「かな」を打つための正しい状態遷移辞書（レシピ）を生成・キャッシュする
-// ★追加：辞書を逆引きして最短の入力キーを見つける軽量関数
+  // ★軽量・安全な逆引きロジック（総当たり探索を廃止）
   function findShortestRawKeys(targetStr) {
-    let getRaw = (target) => {
-      let res = [];
-      for (let k in customKeyMap) {
-        if (customKeyMap[k] === target) res.push(k);
-      }
-      if (res.length === 0 && target.length === 1) res.push(target);
-      return res;
-    };
+    let candidates = [];
+    
+    for (let k in customKeyMap) {
+      if (customKeyMap[k] === targetStr) candidates.push(k);
+    }
+    if (candidates.length === 0 && targetStr.length === 1) candidates.push(targetStr);
 
-    let candidates = getRaw(targetStr);
-
-    // 「にゅ」などの2文字の場合、別々に打つパターン（に＋ゅ）も候補に入れる
     if (targetStr.length === 2) {
-      let k1 = getRaw(targetStr[0]);
-      let k2 = getRaw(targetStr[1]);
+      let k1 = [];
+      let k2 = [];
+      for (let k in customKeyMap) {
+        if (customKeyMap[k] === targetStr[0]) k1.push(k);
+        if (customKeyMap[k] === targetStr[1]) k2.push(k);
+      }
+      if (k1.length === 0) k1.push(targetStr[0]);
+      if (k2.length === 0) k2.push(targetStr[1]);
+
       for (let a of k1) {
         for (let b of k2) {
           candidates.push(a + b);
@@ -493,10 +486,9 @@
 
     if (candidates.length === 0) return null;
     candidates.sort((a, b) => a.length - b.length);
-    return candidates[0]; // 最も短い手順を返す
+    return candidates[0].split(''); 
   }
 
-  // ★修正：重い探索をやめ、直接最短キーからレシピを作る
   function getRecipe(targetStr) {
     if (!targetStr) return {};
     if (recipeCache[targetStr]) return recipeCache[targetStr];
@@ -505,19 +497,18 @@
     let bestRaw = findShortestRawKeys(targetStr);
 
     if (bestRaw) {
-      let state = "";
-      let rawState = "";
+      let rawAccum = "";
       for (let i = 0; i < bestRaw.length; i++) {
+        let state = applyCustomIME(rawAccum);
         validStates[state] = bestRaw[i];
-        rawState += bestRaw[i];
-        state = applyCustomIME(rawState);
+        rawAccum += bestRaw[i];
       }
     }
     
     recipeCache[targetStr] = validStates;
     return validStates;
   }
-  // ターゲット文字列から次に打つべき1つの「かな（または拗音）」を抽出
+
   function getFirstKana(str) {
       if (!str) return "";
       if (str.length >= 2) {
@@ -681,7 +672,6 @@
     listEl.innerHTML = html;
   }
 
-  // ★ 新しいキーボードレイアウト定義
   const KEYBOARD_LAYOUT = [
     [{id: 'q', label: 'q'}, {id: 'w', label: 'w'}, {id: 'e', label: 'e'}, {id: 'r', label: 'r'}, {id: 't', label: ''}, {id: 'y', label: 'y'}, {id: 'u', label: 'u'}, {id: 'i', label: 'i'}, {id: 'o', label: 'o'}, {id: 'p', label: 'p'}, {id: '@', label: '@'}],
     [{id: 'capslock', label: 'Caps', width: '52px'}, {id: 'a', label: 'a'}, {id: 's', label: 's'}, {id: 'd', label: 'd'}, {id: 'f', label: 'f'}, {id: 'g', label: 'g'}, {id: 'h', label: 'h'}, {id: 'j', label: 'j'}, {id: 'k', label: 'k'}, {id: 'l', label: 'l'}, {id: ';', label: ';'}, {id: ':', label: ':'}],
@@ -767,7 +757,7 @@
         }
       });
       
-      initSearchCaches(); // ★ 起動時にキャッシュ準備
+      initSearchCaches(); 
 
       courseData = await courseRes.json();
       buildDropdown();
@@ -821,29 +811,24 @@
     return str.replace(/[\u3041-\u3096]/g, match => String.fromCharCode(match.charCodeAt(0) + 0x60));
   };
 
-function applyCustomIME(inputStr) {
+  // ★壊れていた部分を一番最初の正常な状態に完全に戻しました
+  function applyCustomIME(inputStr) {
     let result = "";
-    let i = 0;
-    while (i < inputStr.length) {
-      let matched = false;
-      // 最大6文字の塊から順に辞書と照らし合わせる
-      for (let len = Math.min(6, inputStr.length - i); len >= 1; len--) {
-        let chunk = inputStr.substring(i, i + len);
-        if (customKeyMap[chunk]) {
-          result += customKeyMap[chunk];
-          i += len;
-          matched = true;
-          break;
+    for (let i = 0; i < inputStr.length; i++) {
+      result += inputStr[i];
+      for (let len = 6; len >= 1; len--) {
+        if (result.length >= len) {
+          let suffix = result.slice(-len);
+          if (customKeyMap[suffix]) {
+            result = result.slice(0, -len) + customKeyMap[suffix];
+            break;
+          }
         }
-      }
-      if (!matched) {
-        result += inputStr[i];
-        i++;
       }
     }
     return result;
   }
-  
+
   function startTimer() {
     startTime = Date.now();
     clearInterval(timerInterval);
@@ -1039,7 +1024,6 @@ function applyCustomIME(inputStr) {
               lastActiveTargetChar = activeChar || lastActiveTargetChar;
             }
 
-            // ★ キャッシュを利用した超軽量レシピチェック
             let remainingTarget = token.target.substring(currentMatch);
             let nextKana = getFirstKana(remainingTarget);
             let recipe = getRecipe(nextKana);
@@ -1052,13 +1036,11 @@ function applyCustomIME(inputStr) {
                 if (prevEl) prevEl.classList.remove('next-highlight');
             }
 
-            // ★ 修正後の次キー表示・無効キー判定ロジック
             if (!isValid) {
-                // 配列に定義されていないキーを打った場合は無反応
                 if (extra.length === 1 && !validMapPrefixes.has(extra)) {
                     nextExpectedKey = null;
                 } else {
-                    nextExpectedKey = 'capslock'; // 修正不可能ならCapsを案内
+                    nextExpectedKey = 'capslock'; 
                 }
             } else {
                 let nextKey = recipe[extra];
@@ -1138,6 +1120,7 @@ function applyCustomIME(inputStr) {
 
   function handleGameInputUpdate() {
     let val = applyCustomIME(gameInputValue);
+    gameInputValue = val;
 
     updateGameVisuals(val);
 
@@ -1295,7 +1278,6 @@ function applyCustomIME(inputStr) {
                   lastActiveTargetChar = activeChar || lastActiveTargetChar;
                 }
 
-                // ★ キャッシュを利用した超軽量レシピチェック
                 let remainingTarget = token.target.substring(currentMatch);
                 let nextKana = getFirstKana(remainingTarget);
                 let recipe = getRecipe(nextKana);
@@ -1308,7 +1290,6 @@ function applyCustomIME(inputStr) {
                     if (prevEl) prevEl.classList.remove('next-highlight');
                 }
 
-                // ★ 修正後の次キー表示・無効キー判定ロジック
                 if (!isValid) {
                     if (extra.length === 1 && !validMapPrefixes.has(extra)) {
                         nextExpectedKey = null;
@@ -1375,6 +1356,7 @@ function applyCustomIME(inputStr) {
             if (!startTime) startTimer();
             
             let val = applyCustomIME(normalInputValue);
+            normalInputValue = val;
 
             let adjustedVal = "";
             for (let i = 0; i < val.length; i++) {
