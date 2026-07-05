@@ -299,6 +299,7 @@
     text-align: center;
   }
 
+  /* ★ 次に押すべきキーの強調スタイル（黒セル＋赤文字＋文字大） */
   .kb-key.next-highlight {
     background-color: #000000 !important;
     color: #ff3333 !important;
@@ -440,7 +441,7 @@
   // ============================================================
   let recipeCache = {};
   let validKeyChars = [];
-  let validMapPrefixes = new Set(); 
+  let validMapPrefixes = new Set(); // ★ 無効なキー（存在しない子音）の判定用
 
   function initSearchCaches() {
       validMapPrefixes.clear();
@@ -449,6 +450,7 @@
           if (k.length === 1 && !/[ァ-ヶぁ-ん]/.test(k)) {
               physicalKeys.add(k.toLowerCase());
           }
+          // 配列定義のプレフィックスを全て登録
           for(let i = 1; i <= k.length; i++) {
               validMapPrefixes.add(k.substring(0, i));
           }
@@ -458,57 +460,46 @@
       recipeCache = {};
   }
 
-  // ★軽量・安全な逆引きロジック（総当たり探索を廃止）
-  function findShortestRawKeys(targetStr) {
-    let candidates = [];
-    
-    for (let k in customKeyMap) {
-      if (customKeyMap[k] === targetStr) candidates.push(k);
-    }
-    if (candidates.length === 0 && targetStr.length === 1) candidates.push(targetStr);
-
-    if (targetStr.length === 2) {
-      let k1 = [];
-      let k2 = [];
-      for (let k in customKeyMap) {
-        if (customKeyMap[k] === targetStr[0]) k1.push(k);
-        if (customKeyMap[k] === targetStr[1]) k2.push(k);
-      }
-      if (k1.length === 0) k1.push(targetStr[0]);
-      if (k2.length === 0) k2.push(targetStr[1]);
-
-      for (let a of k1) {
-        for (let b of k2) {
-          candidates.push(a + b);
-        }
-      }
-    }
-
-    if (candidates.length === 0) return null;
-    candidates.sort((a, b) => a.length - b.length);
-    return candidates[0].split(''); 
-  }
-
+  // 指定した「かな」を打つための正しい状態遷移辞書（レシピ）を生成・キャッシュする
   function getRecipe(targetStr) {
-    if (!targetStr) return {};
-    if (recipeCache[targetStr]) return recipeCache[targetStr];
+      if (!targetStr) return {};
+      if (recipeCache[targetStr]) return recipeCache[targetStr];
 
-    let validStates = {};
-    let bestRaw = findShortestRawKeys(targetStr);
+      let validStates = {};
+      let queue = [ { text: "", path: [] } ];
+      let visited = new Set([""]);
+      let foundPath = null;
 
-    if (bestRaw) {
-      let rawAccum = "";
-      for (let i = 0; i < bestRaw.length; i++) {
-        let state = applyCustomIME(rawAccum);
-        validStates[state] = bestRaw[i];
-        rawAccum += bestRaw[i];
+      while(queue.length > 0) {
+          let curr = queue.shift();
+          
+          if (curr.text === targetStr) {
+              foundPath = curr.path;
+              break;
+          }
+          if (curr.path.length >= 5) continue; // HSWの1文字/拗音入力は最大でも4手程度
+
+          for (let c of validKeyChars) {
+              let nextText = applyCustomIME(curr.text + c);
+              if (nextText.length <= targetStr.length + 1 && !visited.has(nextText)) {
+                  visited.add(nextText);
+                  queue.push({ text: nextText, path: [...curr.path, c] });
+              }
+          }
       }
-    }
-    
-    recipeCache[targetStr] = validStates;
-    return validStates;
+
+      if (foundPath) {
+          let state = "";
+          for (let i = 0; i < foundPath.length; i++) {
+              validStates[state] = foundPath[i];
+              state = applyCustomIME(state + foundPath[i]);
+          }
+      }
+      recipeCache[targetStr] = validStates;
+      return validStates;
   }
 
+  // ターゲット文字列から次に打つべき1つの「かな（または拗音）」を抽出
   function getFirstKana(str) {
       if (!str) return "";
       if (str.length >= 2) {
@@ -672,6 +663,7 @@
     listEl.innerHTML = html;
   }
 
+  // ★ 新しいキーボードレイアウト定義
   const KEYBOARD_LAYOUT = [
     [{id: 'q', label: 'q'}, {id: 'w', label: 'w'}, {id: 'e', label: 'e'}, {id: 'r', label: 'r'}, {id: 't', label: ''}, {id: 'y', label: 'y'}, {id: 'u', label: 'u'}, {id: 'i', label: 'i'}, {id: 'o', label: 'o'}, {id: 'p', label: 'p'}, {id: '@', label: '@'}],
     [{id: 'capslock', label: 'Caps', width: '52px'}, {id: 'a', label: 'a'}, {id: 's', label: 's'}, {id: 'd', label: 'd'}, {id: 'f', label: 'f'}, {id: 'g', label: 'g'}, {id: 'h', label: 'h'}, {id: 'j', label: 'j'}, {id: 'k', label: 'k'}, {id: 'l', label: 'l'}, {id: ';', label: ';'}, {id: ':', label: ':'}],
@@ -757,7 +749,7 @@
         }
       });
       
-      initSearchCaches(); 
+      initSearchCaches(); // ★ 起動時にキャッシュ準備
 
       courseData = await courseRes.json();
       buildDropdown();
@@ -811,7 +803,6 @@
     return str.replace(/[\u3041-\u3096]/g, match => String.fromCharCode(match.charCodeAt(0) + 0x60));
   };
 
-  // ★壊れていた部分を一番最初の正常な状態に完全に戻しました
   function applyCustomIME(inputStr) {
     let result = "";
     for (let i = 0; i < inputStr.length; i++) {
@@ -1024,6 +1015,7 @@
               lastActiveTargetChar = activeChar || lastActiveTargetChar;
             }
 
+            // ★ キャッシュを利用した超軽量レシピチェック
             let remainingTarget = token.target.substring(currentMatch);
             let nextKana = getFirstKana(remainingTarget);
             let recipe = getRecipe(nextKana);
@@ -1036,11 +1028,13 @@
                 if (prevEl) prevEl.classList.remove('next-highlight');
             }
 
+            // ★ 修正後の次キー表示・無効キー判定ロジック
             if (!isValid) {
+                // 配列に定義されていないキーを打った場合は無反応
                 if (extra.length === 1 && !validMapPrefixes.has(extra)) {
                     nextExpectedKey = null;
                 } else {
-                    nextExpectedKey = 'capslock'; 
+                    nextExpectedKey = 'capslock'; // 修正不可能ならCapsを案内
                 }
             } else {
                 let nextKey = recipe[extra];
@@ -1278,6 +1272,7 @@
                   lastActiveTargetChar = activeChar || lastActiveTargetChar;
                 }
 
+                // ★ キャッシュを利用した超軽量レシピチェック
                 let remainingTarget = token.target.substring(currentMatch);
                 let nextKana = getFirstKana(remainingTarget);
                 let recipe = getRecipe(nextKana);
@@ -1290,6 +1285,7 @@
                     if (prevEl) prevEl.classList.remove('next-highlight');
                 }
 
+                // ★ 修正後の次キー表示・無効キー判定ロジック
                 if (!isValid) {
                     if (extra.length === 1 && !validMapPrefixes.has(extra)) {
                         nextExpectedKey = null;
