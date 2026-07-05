@@ -467,7 +467,7 @@
   }
 
   // 指定した「かな」を打つための正しい状態遷移辞書（レシピ）を生成・キャッシュする
-  function getRecipe(targetStr) {
+function getRecipe(targetStr) {
       if (!targetStr) return {};
       if (recipeCache[targetStr]) return recipeCache[targetStr];
 
@@ -483,10 +483,13 @@
               foundPath = curr.path;
               break;
           }
-          if (curr.path.length >= 5) continue; // HSWの1文字/拗音入力は最大でも4手程度
+          if (curr.path.length >= 5) continue;
 
           for (let c of validKeyChars) {
-              let nextText = applyCustomIME(curr.text + c);
+              // ★修正：生のキーストローク（path）に新しいキーを足してから変換する
+              let rawKeys = curr.path.join('') + c;
+              let nextText = applyCustomIME(rawKeys);
+              
               if (nextText.length <= targetStr.length + 1 && !visited.has(nextText)) {
                   visited.add(nextText);
                   queue.push({ text: nextText, path: [...curr.path, c] });
@@ -496,9 +499,11 @@
 
       if (foundPath) {
           let state = "";
+          let rawState = ""; // ★追加：生キーの履歴
           for (let i = 0; i < foundPath.length; i++) {
               validStates[state] = foundPath[i];
-              state = applyCustomIME(state + foundPath[i]);
+              rawState += foundPath[i]; // ★追加
+              state = applyCustomIME(rawState); // ★修正：生キーから状態を生成
           }
       }
       recipeCache[targetStr] = validStates;
@@ -811,46 +816,26 @@
 
 function applyCustomIME(inputStr) {
     let result = "";
-    let buffer = "";
-    
-    for (let i = 0; i < inputStr.length; i++) {
-      buffer += inputStr[i];
+    let i = 0;
+    while (i < inputStr.length) {
       let matched = false;
-      
-      for (let len = Math.min(buffer.length, 6); len >= 1; len--) {
-        let suffix = buffer.slice(-len);
-        
-        if (customKeyMap[suffix]) {
-          // ① 現在の文字の「後ろ」を先読みして、さらに長いキーの一部になるか確認
-          let isPrefixForFuture = false;
-          let futureSuffix = suffix;
-          for (let j = i + 1; j < inputStr.length; j++) {
-            futureSuffix += inputStr[j];
-            if (validMapPrefixes.has(futureSuffix)) {
-              isPrefixForFuture = true; // まだ伸びる可能性があるので保留フラグON
-              break;
-            } else {
-              break;
-            }
-          }
-          
-          if (isPrefixForFuture) {
-            break; // 変換せずに次の文字を待つ
-          }
-          
-          // ② 未来の文字はないが、今の文字が入力の最後尾で、かつ他のキーが来るかもしれない場合
-          if (i === inputStr.length - 1 && strictPrefixes.has(suffix)) {
-            break; // 変換せずに保留
-          }
-          
-          // ③ どこにも繋がらないなら、ここで変換を確定！
-          result += buffer.slice(0, -len) + customKeyMap[suffix];
-          buffer = ""; 
+      // 最大6文字の塊から順に辞書と照らし合わせる
+      for (let len = Math.min(6, inputStr.length - i); len >= 1; len--) {
+        let chunk = inputStr.substring(i, i + len);
+        if (customKeyMap[chunk]) {
+          result += customKeyMap[chunk];
+          i += len;
           matched = true;
           break;
         }
       }
-      
+      if (!matched) {
+        result += inputStr[i];
+        i++;
+      }
+    }
+    return result;
+  }      
       // ループが最後まで到達し、かつ変換されなかった残りカスをくっつける
       if (i === inputStr.length - 1 && !matched) {
         result += buffer;
@@ -1153,7 +1138,6 @@ function applyCustomIME(inputStr) {
 
   function handleGameInputUpdate() {
     let val = applyCustomIME(gameInputValue);
-    gameInputValue = val;
 
     updateGameVisuals(val);
 
@@ -1391,7 +1375,6 @@ function applyCustomIME(inputStr) {
             if (!startTime) startTimer();
             
             let val = applyCustomIME(normalInputValue);
-            normalInputValue = val;
 
             let adjustedVal = "";
             for (let i = 0; i < val.length; i++) {
