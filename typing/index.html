@@ -203,6 +203,67 @@
   }
   .metric-value.warn { color: #e11d48; }
 
+  .info-icon-wrap {
+    position: relative;
+    display: inline-flex;
+    vertical-align: middle;
+    cursor: help;
+  }
+  .info-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: var(--border-line);
+    color: var(--status-text);
+    font-size: 10px;
+    font-weight: bold;
+    font-style: normal;
+    margin-left: 5px;
+  }
+  .info-tooltip {
+    visibility: hidden;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.15s ease;
+    position: absolute;
+    z-index: 100;
+    top: 0;
+    right: calc(100% + 10px);
+    width: 300px;
+    background: #333333;
+    color: #fdfdfc;
+    font-size: 12px;
+    line-height: 1.7;
+    padding: 14px 16px;
+    border-radius: 8px;
+    box-shadow: 0 6px 20px rgba(0,0,0,0.25);
+    white-space: normal;
+    text-align: left;
+  }
+  .info-tooltip strong {
+    color: #f4e6c1;
+  }
+  .info-tooltip .formula {
+    display: block;
+    color: #c8e6a0;
+    margin: 4px 0;
+    font-family: monospace;
+  }
+  .info-icon-wrap:hover .info-tooltip {
+    visibility: visible;
+    opacity: 1;
+  }
+  #keyboard-heatmap-title .info-tooltip {
+    top: auto;
+    bottom: calc(100% + 10px);
+    right: auto;
+    left: 50%;
+    transform: translateX(-50%);
+  }
+
   #mistake-sidebar {
     position: fixed;
     bottom: 160px;
@@ -365,13 +426,33 @@
 
 <div id="stats-sidebar">
   <div class="side-panel">
-    <div class="side-panel-title">⚡ 速度</div>
+    <div class="side-panel-title">速度
+      <span class="info-icon-wrap"><span class="info-icon">?</span><span class="info-tooltip">
+        <strong>CPM</strong>(Characters Per Minute): 確定文字ベース。画面表記(漢字混じり)の進捗速度。
+        <span class="formula">CPM = 確定した日本語の総文字数 ÷ 合計時間(秒) × 60</span>
+        <strong>MPM</strong>(Moras Per Minute) ★実質スピード: 内部的な「読み(かな)」の進捗。「おきゃくさま」なら5モーラ。
+        <span class="formula">MPM = 確定した「かな(モーラ)」の総数 ÷ 合計時間(秒) × 60</span>
+        <strong>KPM</strong>(Keys Per Minute): 指の運動速度。正解ルートのみのKPM1と、無駄打ちを含むKPM2を併記。
+        <span class="formula">KPM1 = 正解ルートと判定された物理キー回数 ÷ 合計時間(秒) × 60</span>
+        <span class="formula">KPM2 = 実際に押した物理キー総回数 ÷ 合計時間(秒) × 60</span>
+        例: 250(280)なら差分の30がミスや復帰に費やした無駄な打鍵。差が縮まるほど効率的。
+      </span></span>
+    </div>
     <div class="metric-row"><span>CPM</span><span class="metric-value" id="stat-cpm">0</span></div>
     <div class="metric-row"><span>MPM</span><span class="metric-value" id="stat-mpm">0</span></div>
     <div class="metric-row"><span>KPM1 (KPM2)</span><span class="metric-value" id="stat-kpm12">0 (0)</span></div>
   </div>
   <div class="side-panel">
-    <div class="side-panel-title">🎯 正確性</div>
+    <div class="side-panel-title">正確性
+      <span class="info-icon-wrap"><span class="info-icon">?</span><span class="info-tooltip">
+        ミスに対する二重評価(ペナルティの重複)を排除した、厳密な正確性です。
+        <strong>打鍵正確性</strong>: 押した全キーのうち、正しい入力ルートとして受け入れられた割合。
+        <span class="formula">打鍵正確性(%) = KPM1 ÷ KPM2 × 100</span>
+        <strong>確定正確性</strong>: 画面に「赤字」が表示された回数のみをペナルティとします。
+        <span class="formula">確定正確性(%) = (1 − 赤字確定回数 ÷ 確定した「かな」の総数) × 100</span>
+        ※CapsLock等での復帰操作自体はKPM2に反映されるため、ここではカウントしません。
+      </span></span>
+    </div>
     <div class="metric-row"><span>打鍵正確性</span><span class="metric-value" id="stat-key-acc">100%</span></div>
     <div class="metric-row"><span>確定正確性</span><span class="metric-value" id="stat-confirm-acc">100%</span></div>
   </div>
@@ -379,13 +460,26 @@
 
 <div id="mistake-sidebar">
   <div class="side-panel">
-    <div class="side-panel-title">🐢 苦手な文字</div>
+    <div class="side-panel-title">苦手な文字
+      <span class="info-icon-wrap"><span class="info-icon">?</span><span class="info-tooltip">
+        ユーザーがどの「文字(音)」でつまずいているかをリスト化します。抽出ルール:
+        1. 確定正確性を落とした原因(赤字確定した「かな」)を抽出。
+        2. 赤字にはなっていないが、入力完了までにかかった時間が全文字の平均より極端に遅い「かな」を抽出。
+      </span></span>
+    </div>
     <div id="mistake-list">まだデータがありません</div>
   </div>
 </div>
 
 <div id="keyboard-heatmap-wrapper">
-  <div id="keyboard-heatmap-title">キー別ヒートマップ（色 = 速度 / 赤バッジ = ミス回数）</div>
+  <div id="keyboard-heatmap-title">キー別ヒートマップ（色 = 速度 / 赤バッジ = ミス回数）
+    <span class="info-icon-wrap"><span class="info-icon">?</span><span class="info-tooltip">
+      物理キーボードのレイアウト上に、キーごとの「速度」と「ミス率」を色と数値で表示します。
+      <span class="formula">T(Kn) = Kn を押した時刻 − 直前のキーKn-1を押した時刻</span>
+      【重要】除外条件: Kn-1が前の行(またはフレーズ)の最後の打鍵だった場合、次のKnを押すまでの時間は計算から完全に除外します。
+      例:「ある。かわりに」の場合、「る」または「。」を打ち終わった後、次の「か」の最初の子音(s)を打ち始めるまでの時間は、画面を見て考えている時間のため、純粋な打鍵速度の評価には含めません。
+    </span></span>
+  </div>
   <div id="keyboard-heatmap"></div>
 </div>
 
@@ -699,7 +793,7 @@
   const KEYBOARD_LAYOUT = [
     [{id: 'q', label: 'q'}, {id: 'w', label: 'w'}, {id: 'e', label: 'e'}, {id: 'r', label: 'r'}, {id: 't', label: ''}, {id: 'y', label: 'y'}, {id: 'u', label: 'u'}, {id: 'i', label: 'i'}, {id: 'o', label: 'o'}, {id: 'p', label: 'p'}, {id: '@', label: '@'}],
     [{id: 'capslock', label: 'Caps', width: '52px'}, {id: 'a', label: 'a'}, {id: 's', label: 's'}, {id: 'd', label: 'd'}, {id: 'f', label: 'f'}, {id: 'g', label: 'g'}, {id: 'h', label: 'h'}, {id: 'j', label: 'j'}, {id: 'k', label: 'k'}, {id: 'l', label: 'l'}, {id: ';', label: ';'}, {id: ':', label: ':'}],
-    [{id: 'z', label: ''}, {id: 'x', label: ''}, {id: 'c', label: ''}, {id: 'v', label: ''}, {id: 'b', label: ''}, {id: 'n', label: ''}, {id: 'm', label: ''}, {id: ',', label: ''}, {id: '.', label: ''}, {id: '/', label: ''}]
+    [{id: 'z', label: ''}, {id: 'x', label: ''}, {id: 'c', label: ''}, {id: 'v', label: 'v'}, {id: 'b', label: ''}, {id: 'n', label: ''}, {id: 'm', label: ''}, {id: ',', label: ''}, {id: '.', label: ''}, {id: '/', label: ''}]
   ];
 
   function timeToColor(t, minT, maxT) {
