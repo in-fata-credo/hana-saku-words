@@ -820,6 +820,28 @@
     return result;
   }
 
+  // ============================================================
+  // 削除操作(CapsLock/Backspace)による「合成の区切り」管理
+  // ------------------------------------------------------------
+  // customKeyMapのsuffixマッチは文字列としてしか判定しないため、
+  // この不可視の境界マーカーがバッファに挟まっている限り、
+  // 削除前の文字と削除後に打った新しいキーが連結して変換されることはない。
+  // ============================================================
+  const IME_BOUNDARY = ' ';
+
+  function stripBoundary(s) {
+    return s.split(IME_BOUNDARY).join('');
+  }
+
+  // 現在のバッファ(内部的に境界マーカーを含み得る)を「表示上1文字」削除し、
+  // 削除地点に境界マーカーを置く。以降のキー入力はここより前の文字とは
+  // 独立した新規入力として扱われる(=削除前の合成状態には巻き戻らない)。
+  function deleteOneVisibleChar(buffer) {
+    let displayed = stripBoundary(applyCustomIME(buffer));
+    displayed = displayed.slice(0, -1);
+    return displayed + IME_BOUNDARY;
+  }
+
   function startTimer() {
     startTime = Date.now();
     clearInterval(timerInterval);
@@ -1099,7 +1121,7 @@
 
     if (e.code === 'CapsLock' || e.key === 'Alphanumeric' || e.code === 'Lang2' || e.key === 'Backspace') {
       e.preventDefault();
-      gameInputValue = gameInputValue.slice(0, -1);
+      gameInputValue = deleteOneVisibleChar(gameInputValue);
       recordDeletion();
       handleGameInputUpdate();
       return;
@@ -1113,8 +1135,9 @@
   });
 
   function handleGameInputUpdate() {
-    let val = applyCustomIME(gameInputValue);
-    gameInputValue = val;
+    let raw = applyCustomIME(gameInputValue);
+    gameInputValue = raw; // 内部バッファ(境界マーカーを含み得る)
+    let val = stripBoundary(raw); // 表示・判定用(マーカー除去済み)
 
     updateGameVisuals(val);
 
@@ -1351,8 +1374,9 @@
           const checkInput = () => {
             if (!startTime) startTimer();
             
-            let val = applyCustomIME(normalInputValue);
-            normalInputValue = val;
+            let raw = applyCustomIME(normalInputValue);
+            normalInputValue = raw; // 内部バッファ(境界マーカーを含み得る)
+            let val = stripBoundary(raw); // 表示・判定用(マーカー除去済み)
 
             let adjustedVal = "";
             for (let i = 0; i < val.length; i++) {
@@ -1393,7 +1417,7 @@
           inputField.addEventListener('keydown', (e) => {
             if (e.code === 'CapsLock' || e.key === 'Alphanumeric' || e.code === 'Lang2' || e.key === 'Backspace') {
               e.preventDefault();
-              normalInputValue = normalInputValue.slice(0, -1);
+              normalInputValue = deleteOneVisibleChar(normalInputValue);
               recordDeletion();
               checkInput();
               return;
