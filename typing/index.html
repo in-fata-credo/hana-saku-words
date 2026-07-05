@@ -809,27 +809,56 @@
     return str.replace(/[\u3041-\u3096]/g, match => String.fromCharCode(match.charCodeAt(0) + 0x60));
   };
 
-  function applyCustomIME(inputStr) {
+function applyCustomIME(inputStr) {
     let result = "";
+    let buffer = "";
+    
     for (let i = 0; i < inputStr.length; i++) {
-      result += inputStr[i];
-      for (let len = 6; len >= 1; len--) {
-        if (result.length >= len) {
-          let suffix = result.slice(-len);
-          if (customKeyMap[suffix]) {
-            let isAtEnd = (i === inputStr.length - 1);
-            if (isAtEnd && strictPrefixes.has(suffix)) {
-              break; 
+      buffer += inputStr[i];
+      let matched = false;
+      
+      for (let len = Math.min(buffer.length, 6); len >= 1; len--) {
+        let suffix = buffer.slice(-len);
+        
+        if (customKeyMap[suffix]) {
+          // ① 現在の文字の「後ろ」を先読みして、さらに長いキーの一部になるか確認
+          let isPrefixForFuture = false;
+          let futureSuffix = suffix;
+          for (let j = i + 1; j < inputStr.length; j++) {
+            futureSuffix += inputStr[j];
+            if (validMapPrefixes.has(futureSuffix)) {
+              isPrefixForFuture = true; // まだ伸びる可能性があるので保留フラグON
+              break;
+            } else {
+              break;
             }
-            result = result.slice(0, -len) + customKeyMap[suffix];
-            break;
           }
+          
+          if (isPrefixForFuture) {
+            break; // 変換せずに次の文字を待つ
+          }
+          
+          // ② 未来の文字はないが、今の文字が入力の最後尾で、かつ他のキーが来るかもしれない場合
+          if (i === inputStr.length - 1 && strictPrefixes.has(suffix)) {
+            break; // 変換せずに保留
+          }
+          
+          // ③ どこにも繋がらないなら、ここで変換を確定！
+          result += buffer.slice(0, -len) + customKeyMap[suffix];
+          buffer = ""; 
+          matched = true;
+          break;
         }
       }
+      
+      // ループが最後まで到達し、かつ変換されなかった残りカスをくっつける
+      if (i === inputStr.length - 1 && !matched) {
+        result += buffer;
+      }
     }
+    
     return result;
   }
-
   function startTimer() {
     startTime = Date.now();
     clearInterval(timerInterval);
