@@ -442,9 +442,11 @@
   let recipeCache = {};
   let validKeyChars = [];
   let validMapPrefixes = new Set(); // ★ 無効なキー（存在しない子音）の判定用
-
+  let strictPrefixes = new Set();
+  
   function initSearchCaches() {
       validMapPrefixes.clear();
+      strictPrefixes.clear();
       let physicalKeys = new Set();
       for (let k in customKeyMap) {
           if (k.length === 1 && !/[ァ-ヶぁ-ん]/.test(k)) {
@@ -453,6 +455,10 @@
           // 配列定義のプレフィックスを全て登録
           for(let i = 1; i <= k.length; i++) {
               validMapPrefixes.add(k.substring(0, i));
+          }
+          // ★追加：自分より長いキーが存在する「途中までの文字列」だけを登録
+          for(let i = 1; i < k.length; i++) {
+              strictPrefixes.add(k.substring(0, i));
           }
       }
       "abcdefghijklmnopqrstuvwxyz-.,;:/@+*<>?1234567890".split('').forEach(c => physicalKeys.add(c));
@@ -811,6 +817,10 @@
         if (result.length >= len) {
           let suffix = result.slice(-len);
           if (customKeyMap[suffix]) {
+            let isAtEnd = (i === inputStr.length - 1);
+            if (isAtEnd && strictPrefixes.has(suffix)) {
+              break; 
+            }
             result = result.slice(0, -len) + customKeyMap[suffix];
             break;
           }
