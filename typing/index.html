@@ -461,20 +461,13 @@
   }
 
   // 指定した「かな」を打つための正しい状態遷移辞書（レシピ）を生成・キャッシュする
-// ★元の完璧な applyCustomIME は一切いじらずそのまま使います！
-  
-  // ★修正：ガイダンス探索（getRecipe）の足切りルールを緩め、最短ルートを確実に見つける
   function getRecipe(targetStr) {
       if (!targetStr) return {};
       if (recipeCache[targetStr]) return recipeCache[targetStr];
 
       let validStates = {};
       let queue = [ { text: "", path: [] } ];
-      
-      // 一度通った状態を記録するが、「より短い手順」で見つけた場合は上書きして再探索する
-      let visited = new Map();
-      visited.set("", 0);
-      
+      let visited = new Set([""]);
       let foundPath = null;
 
       while(queue.length > 0) {
@@ -484,25 +477,17 @@
               foundPath = curr.path;
               break;
           }
-          // 探索の深さを少し余裕を持たせて6手までに設定
-          if (curr.path.length >= 6) continue; 
+          if (curr.path.length >= 5) continue; // HSWの1文字/拗音入力は最大でも4手程度
 
           for (let c of validKeyChars) {
               let nextText = applyCustomIME(curr.text + c);
-              
-              // 異常に長い文字列になった場合のみ足切りする（緩い制限）
-              if (nextText.length > targetStr.length + 6) continue;
-
-              let nextPathLen = curr.path.length + 1;
-              // 初めて到達した状態、または「前回より短い手数（例: ejqjlより短いejl）」で到達した場合は探索ルートに入れる
-              if (!visited.has(nextText) || visited.get(nextText) > nextPathLen) {
-                  visited.set(nextText, nextPathLen);
+              if (nextText.length <= targetStr.length + 1 && !visited.has(nextText)) {
+                  visited.add(nextText);
                   queue.push({ text: nextText, path: [...curr.path, c] });
               }
           }
       }
 
-      // 見つけた最短ルート（ejl）を画面のナビゲート用に登録する
       if (foundPath) {
           let state = "";
           for (let i = 0; i < foundPath.length; i++) {
@@ -513,6 +498,7 @@
       recipeCache[targetStr] = validStates;
       return validStates;
   }
+
   // ターゲット文字列から次に打つべき1つの「かな（または拗音）」を抽出
   function getFirstKana(str) {
       if (!str) return "";
