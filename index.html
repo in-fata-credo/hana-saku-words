@@ -236,9 +236,36 @@
 
         .demo-labels { display: flex; justify-content: center; gap: 100px; font-size: 0.8rem; color: #888; margin-top: 0; }
         footer { text-align: center; padding: 40px 20px; background-color: #fff; font-size: 0.9rem; color: #888; border-top: 1px solid #eaeaea; margin-top: 40px; }
+
+        .typing-practice-link {
+            position: fixed;
+            top: 18px;
+            right: 20px;
+            z-index: 1000;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            background-color: #ffffff;
+            color: var(--garden-green);
+            border: 1px solid var(--garden-green);
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            font-weight: bold;
+            text-decoration: none;
+            letter-spacing: 0.05em;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+            transition: background-color 0.2s, color 0.2s;
+        }
+        .typing-practice-link:hover { background-color: var(--garden-green); color: #fff; }
+        @media (max-width: 600px) {
+            .typing-practice-link { top: 10px; right: 10px; padding: 6px 12px; font-size: 0.75rem; }
+        }
     </style>
 </head>
 <body>
+
+    <a href="./typing/index.html" class="typing-practice-link">タイピングの練習はこちら ➔</a>
 
     <header class="hero">
         <h1>花咲く言葉</h1>
