@@ -467,49 +467,56 @@
   }
 
   // 指定した「かな」を打つための正しい状態遷移辞書（レシピ）を生成・キャッシュする
-function getRecipe(targetStr) {
-      if (!targetStr) return {};
-      if (recipeCache[targetStr]) return recipeCache[targetStr];
-
-      let validStates = {};
-      let queue = [ { text: "", path: [] } ];
-      let visited = new Set([""]);
-      let foundPath = null;
-
-      while(queue.length > 0) {
-          let curr = queue.shift();
-          
-          if (curr.text === targetStr) {
-              foundPath = curr.path;
-              break;
-          }
-          if (curr.path.length >= 5) continue;
-
-          for (let c of validKeyChars) {
-              // ★修正：生のキーストローク（path）に新しいキーを足してから変換する
-              let rawKeys = curr.path.join('') + c;
-              let nextText = applyCustomIME(rawKeys);
-              
-              if (nextText.length <= targetStr.length + 1 && !visited.has(nextText)) {
-                  visited.add(nextText);
-                  queue.push({ text: nextText, path: [...curr.path, c] });
-              }
-          }
+// ★追加：辞書を逆引きして最短の入力キーを見つける軽量関数
+  function findShortestRawKeys(targetStr) {
+    let getRaw = (target) => {
+      let res = [];
+      for (let k in customKeyMap) {
+        if (customKeyMap[k] === target) res.push(k);
       }
+      if (res.length === 0 && target.length === 1) res.push(target);
+      return res;
+    };
 
-      if (foundPath) {
-          let state = "";
-          let rawState = ""; // ★追加：生キーの履歴
-          for (let i = 0; i < foundPath.length; i++) {
-              validStates[state] = foundPath[i];
-              rawState += foundPath[i]; // ★追加
-              state = applyCustomIME(rawState); // ★修正：生キーから状態を生成
-          }
+    let candidates = getRaw(targetStr);
+
+    // 「にゅ」などの2文字の場合、別々に打つパターン（に＋ゅ）も候補に入れる
+    if (targetStr.length === 2) {
+      let k1 = getRaw(targetStr[0]);
+      let k2 = getRaw(targetStr[1]);
+      for (let a of k1) {
+        for (let b of k2) {
+          candidates.push(a + b);
+        }
       }
-      recipeCache[targetStr] = validStates;
-      return validStates;
+    }
+
+    if (candidates.length === 0) return null;
+    candidates.sort((a, b) => a.length - b.length);
+    return candidates[0]; // 最も短い手順を返す
   }
 
+  // ★修正：重い探索をやめ、直接最短キーからレシピを作る
+  function getRecipe(targetStr) {
+    if (!targetStr) return {};
+    if (recipeCache[targetStr]) return recipeCache[targetStr];
+
+    let validStates = {};
+    let bestRaw = findShortestRawKeys(targetStr);
+
+    if (bestRaw) {
+      let state = "";
+      let rawState = "";
+      for (let i = 0; i < bestRaw.length; i++) {
+        validStates[state] = bestRaw[i];
+        rawState += bestRaw[i];
+        state = applyCustomIME(rawState);
+      }
+    }
+    
+    recipeCache[targetStr] = validStates;
+    return validStates;
+  }
   // ターゲット文字列から次に打つべき1つの「かな（または拗音）」を抽出
   function getFirstKana(str) {
       if (!str) return "";
@@ -835,15 +842,8 @@ function applyCustomIME(inputStr) {
       }
     }
     return result;
-  }      
-      // ループが最後まで到達し、かつ変換されなかった残りカスをくっつける
-      if (i === inputStr.length - 1 && !matched) {
-        result += buffer;
-      }
-    }
-    
-    return result;
   }
+  
   function startTimer() {
     startTime = Date.now();
     clearInterval(timerInterval);
