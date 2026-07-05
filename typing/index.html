@@ -390,9 +390,14 @@
 </div>
 
 <script>
+  // 、。？！はHSW配列では「v+j/k/;/l」がホームポジション内の正規ルート。
+  // ここに,.?!のショートカットを残すと、そちらが打てても正解になってしまう
+  // ため、v経由の入力しか認めないようにあえて登録しない(-はvと無関係の
+  // 「ー」用キーなので従来通り残す)。
   let customKeyMap = {
-    ",": "、", ".": "。", "-": "ー", "?": "？", "!": "！"
+    "-": "ー"
   };
+  const DEFAULT_PUNCTUATION_KEYS = new Set(["-"]);
   let courseData = {};
 
   const toggleBtn = document.getElementById('toggle-settings');
@@ -456,6 +461,11 @@
           }
       }
       "abcdefghijklmnopqrstuvwxyz-.,;:/@+*<>?1234567890".split('').forEach(c => physicalKeys.add(c));
+      // 「,」「.」「-」「?」「!」はcustomKeyMap初期値のショートカット(、。ー？！)だが、
+      // このHSW配列では本来「v+j/k/l/;/p」等ホームポジション内の経路が正規ルート。
+      // ここを候補から除外しないと、次キー案内がホームポジションを外れたキーを
+      // 案内してしまう(実際の入力自体は引き続きcustomKeyMap経由で機能する)。
+      DEFAULT_PUNCTUATION_KEYS.forEach(c => physicalKeys.delete(c));
       validKeyChars = Array.from(physicalKeys);
       recipeCache = {};
   }
@@ -472,16 +482,19 @@
 
       while(queue.length > 0) {
           let curr = queue.shift();
-          
+
           if (curr.text === targetStr) {
               foundPath = curr.path;
               break;
           }
           if (curr.path.length >= 5) continue; // HSWの1文字/拗音入力は最大でも4手程度
 
+          // 中間状態が目標文字数を超えて伸びることはほぼ無い(customKeyMapは
+          // ローマ字を「同じか短い」かなに畳み込む設計のため)。+1猶予を許すと
+          // 無関係なゴミ状態が指数的に増え、拗音(2文字)の探索が数秒かかっていた。
           for (let c of validKeyChars) {
               let nextText = applyCustomIME(curr.text + c);
-              if (nextText.length <= targetStr.length + 1 && !visited.has(nextText)) {
+              if (nextText.length <= targetStr.length && !visited.has(nextText)) {
                   visited.add(nextText);
                   queue.push({ text: nextText, path: [...curr.path, c] });
               }
@@ -509,6 +522,25 @@
           }
       }
       return str.substring(0, 1);
+  }
+
+  // targetReadingを「拗音は2文字1組」というモーラ単位に分割する。
+  // 一致数カウント(matchLen)がこの単位を無視すると、拗音の1文字目だけで
+  // 「打ち終わった」と誤認識し、次に打つキーの案内が振り出しに戻ってしまう。
+  function splitIntoMoraUnits(str) {
+      let units = [];
+      let i = 0;
+      while (i < str.length) {
+          let two = str.substring(i, i + 2);
+          if (two.length === 2 && /[ぁ-んァ-ヶ][ゃゅょぁぃぅぇぉャュョァィゥェォ]/.test(two)) {
+              units.push(two);
+              i += 2;
+          } else {
+              units.push(str[i]);
+              i += 1;
+          }
+      }
+      return units;
   }
 
   function resetSessionStats() {
@@ -761,16 +793,26 @@
     }
   }
 
+  // ルビの付かない地の文字を1文字ずつトークン化する。
+  // 「ショ」のような拗音がルビなしの連続文字(シ+ョ)として出現する場合、
+  // 別々のトークンのままだとgetFirstKanaがトークン単位でしか見えず
+  // 拗音として認識できない(次キー案内が壊れる)ため、拗音は1トークンにまとめる。
+  function pushCharTokens(tokens, text) {
+    for (const unit of splitIntoMoraUnits(text)) {
+      tokens.push({ type: 'char', char: unit, target: unit });
+    }
+  }
+
   function parseAozora(line) {
     const regex = /(?:[｜|]([^《]+)《([^》]+)》)|([\u4E00-\u9FFF\u3005\u3007]+)《([^》]+)》/g;
     let tokens = [];
     let lastIndex = 0;
     let match;
-    
+
     while ((match = regex.exec(line)) !== null) {
       if (match.index > lastIndex) {
         const preText = line.substring(lastIndex, match.index);
-        for (const char of preText) tokens.push({ type: 'char', char: char, target: char });
+        pushCharTokens(tokens, preText);
       }
       const base = match[1] || match[3];
       const ruby = match[2] || match[4];
@@ -779,7 +821,7 @@
     }
     if (lastIndex < line.length) {
       const postText = line.substring(lastIndex);
-      for (const char of postText) tokens.push({ type: 'char', char: char, target: char });
+      pushCharTokens(tokens, postText);
     }
     return tokens;
   }
@@ -801,6 +843,13 @@
   const hiraToKata = (str) => {
     if (!str) return "";
     return str.replace(/[\u3041-\u3096]/g, match => String.fromCharCode(match.charCodeAt(0) + 0x60));
+  };
+
+  // hiraToKataの逆変換。customKeyMapはひらがなしか生成できないため、
+  // カタカナが目標文字のときにレシピ探索(getRecipe)へ渡す前にひらがな化する。
+  const kataToHira = (str) => {
+    if (!str) return "";
+    return str.replace(/[\u30a1-\u30f6]/g, match => String.fromCharCode(match.charCodeAt(0) - 0x60));
   };
 
   function applyCustomIME(inputStr) {
@@ -998,10 +1047,19 @@
         adjustedVal += typedChar;
     }
 
+    // ★ モーラ単位のレシピ完了判定
+    // 単純な文字比較だと、customKeyMapの「ナf→マ」のようなカタカナ直行
+    // ショートカットが目標文字と偶然一致した時点で「完了」と誤認識してしまう
+    // (本来は「え→f→i」の3打鍵で「ま」に到達するのが正規ルート)。
+    // そのため「まだレシピ上の中間状態か」をgetRecipeで確認してから確定させる。
     let matchLen = 0;
-    for (let i = 0; i < adjustedVal.length; i++) {
-        if (adjustedVal[i] === targetReading[i]) matchLen++;
-        else break;
+    for (const mora of splitIntoMoraUnits(targetReading)) {
+        let extra = val.substring(matchLen);
+        if (extra === "") break;
+        let recipe = getRecipe(kataToHira(mora));
+        if (extra in recipe) break;
+        if (adjustedVal.substring(matchLen, matchLen + mora.length) !== mora) break;
+        matchLen += mora.length;
     }
 
     let remainingVal = val;
@@ -1040,11 +1098,11 @@
             // ★ キャッシュを利用した超軽量レシピチェック
             let remainingTarget = token.target.substring(currentMatch);
             let nextKana = getFirstKana(remainingTarget);
-            let recipe = getRecipe(nextKana);
+            let recipe = getRecipe(kataToHira(nextKana));
 
             let extra = remainingVal.substring(currentMatch);
             let isValid = (extra in recipe) || (extra === "");
-            
+
             if (nextExpectedKey) {
                 const prevEl = document.getElementById('kb-key-' + nextExpectedKey);
                 if (prevEl) prevEl.classList.remove('next-highlight');
@@ -1253,10 +1311,15 @@
                 adjustedVal += typedChar;
             }
 
+            // ★ モーラ単位のレシピ完了判定(詳細はupdateGameVisualsのコメント参照)
             let matchLen = 0;
-            for (let i = 0; i < adjustedVal.length; i++) {
-                if (adjustedVal[i] === targetReading[i]) matchLen++;
-                else break;
+            for (const mora of splitIntoMoraUnits(targetReading)) {
+                let extra = val.substring(matchLen);
+                if (extra === "") break;
+                let recipe = getRecipe(kataToHira(mora));
+                if (extra in recipe) break;
+                if (adjustedVal.substring(matchLen, matchLen + mora.length) !== mora) break;
+                matchLen += mora.length;
             }
 
             let remainingVal = val;
@@ -1298,7 +1361,7 @@
                 // ★ キャッシュを利用した超軽量レシピチェック
                 let remainingTarget = token.target.substring(currentMatch);
                 let nextKana = getFirstKana(remainingTarget);
-                let recipe = getRecipe(nextKana);
+                let recipe = getRecipe(kataToHira(nextKana));
 
                 let extra = remainingVal.substring(currentMatch);
                 let isValid = (extra in recipe) || (extra === "");
@@ -1388,7 +1451,7 @@
               adjustedVal += typedChar;
             }
 
-            updateVisuals(adjustedVal, val); 
+            updateVisuals(val);
 
             let targetReading = parsed.tokens.map(t => t.target).join('');
 
