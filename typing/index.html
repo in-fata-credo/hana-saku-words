@@ -1589,18 +1589,23 @@
     updateGameVisuals(val);
 
     let targetReading = currentWordObj.tokens.map(t => t.target).join('');
-    let adjustedVal = "";
+
+    // ★ タイピングで実際に打ち切る文字は常にひらがな。カタカナは
+    // 確定前の遷移状態にすぎないため、目標がカタカナでも、typedCharが
+    // ひらがなに確定していない限り(=カタカナのまま偶然一致していても)
+    // 未完了として扱う。
+    let matchLen = 0;
     for (let i = 0; i < val.length; i++) {
         let typedChar = val[i];
         let targetChar = targetReading[i];
-        if (targetChar && hiraToKata(typedChar) === targetChar) typedChar = targetChar;
-        adjustedVal += typedChar;
-    }
-
-    let matchLen = 0;
-    for (let i = 0; i < adjustedVal.length; i++) {
-        if (adjustedVal[i] === targetReading[i]) matchLen++;
-        else break;
+        if (!targetChar) break;
+        if (/[ァ-ヶ]/.test(targetChar)) {
+            if (/[ぁ-ゖ]/.test(typedChar) && hiraToKata(typedChar) === targetChar) matchLen++;
+            else break;
+        } else {
+            if (typedChar === targetChar) matchLen++;
+            else break;
+        }
     }
 
     if (matchLen === targetReading.length && val.length === targetReading.length) {
@@ -1830,24 +1835,26 @@
             normalInputValue = raw; // 内部バッファ(境界マーカーを含み得る)
             let val = stripBoundary(raw); // 表示・判定用(マーカー除去済み)
 
-            let adjustedVal = "";
-            for (let i = 0; i < val.length; i++) {
-              let typedChar = val[i];
-              let targetChar = parsed.targetLine[i]; 
-              if (targetChar && hiraToKata(typedChar) === targetChar) {
-                typedChar = targetChar;
-              }
-              adjustedVal += typedChar;
-            }
-
             updateVisuals(val);
 
             let targetReading = parsed.tokens.map(t => t.target).join('');
 
+            // ★ タイピングで実際に打ち切る文字は常にひらがな。カタカナは
+            // 確定前の遷移状態にすぎないため、目標がカタカナでも、typedCharが
+            // ひらがなに確定していない限り(=カタカナのまま偶然一致していても)
+            // 未完了として扱う(詳細はupdateGameVisualsのコメント参照)。
             let matchLen = 0;
-            for (let i = 0; i < adjustedVal.length; i++) {
-                if (adjustedVal[i] === targetReading[i]) matchLen++;
-                else break;
+            for (let i = 0; i < val.length; i++) {
+                let typedChar = val[i];
+                let targetChar = targetReading[i];
+                if (!targetChar) break;
+                if (/[ァ-ヶ]/.test(targetChar)) {
+                    if (/[ぁ-ゖ]/.test(typedChar) && hiraToKata(typedChar) === targetChar) matchLen++;
+                    else break;
+                } else {
+                    if (typedChar === targetChar) matchLen++;
+                    else break;
+                }
             }
 
             if (matchLen === targetReading.length && val.length === targetReading.length) {
