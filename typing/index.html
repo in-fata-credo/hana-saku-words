@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>花咲く言葉 (HSW配列) - タイピングプラクティス β版 v1.01</title>
+<title>花咲く言葉 (HSW配列) - タイピングプラクティス v2.0</title>
 <style>
   :root {
     --bg-color: #fcfbf9; 
@@ -234,6 +234,25 @@
   }
   .metric-value.warn { color: #e11d48; }
 
+  #pause-status-btn {
+    display: block;
+    width: 100%;
+    box-sizing: border-box;
+    border: none;
+    border-radius: 8px;
+    padding: 10px 8px;
+    margin-bottom: 12px;
+    font-size: 13px;
+    font-weight: bold;
+    font-family: sans-serif;
+    cursor: pointer;
+    color: #fff;
+    transition: background-color 0.2s;
+  }
+  #pause-status-btn.ready { background-color: var(--status-text); }
+  #pause-status-btn.playing { background-color: var(--text-active-prompt); }
+  #pause-status-btn.paused { background-color: #e07a1f; }
+
   .info-icon-wrap {
     position: relative;
     display: inline-flex;
@@ -400,20 +419,44 @@
 <body>
 
 <div class="header">
-  <h2>✿ 花咲く言葉 - タイピングの庭 β版 v1.01</h2>
+  <h2>✿ 花咲く言葉 - タイピングの庭 v2.0</h2>
   <button class="settings-btn" id="toggle-settings" title="設定・コース選択">⚙️</button>
 </div>
 
 <div id="settings-panel">
   <label for="course-select" style="color: var(--status-text); font-weight: bold;">練習コースを選択してください：</label>
   <select id="course-select"></select>
-  
+
+  <div style="margin-top: 20px; padding-top: 20px; border-top: 1px solid var(--border-line);">
+    <label style="color: var(--status-text); font-weight: bold; display:block; margin-bottom:8px;">出題順</label>
+    <label style="margin-right:15px;"><input type="radio" name="order-mode" id="order-mode-sequential" value="sequential" checked> 順番</label>
+    <label><input type="radio" name="order-mode" id="order-mode-random" value="random"> ランダム</label>
+  </div>
+
+  <div style="margin-top: 20px;">
+    <label style="color: var(--status-text); font-weight: bold; display:block; margin-bottom:8px;">プレイ形式</label>
+    <label style="margin-right:15px;"><input type="radio" name="play-format" id="play-format-normal" value="normal" checked> 通常</label>
+    <label style="margin-right:15px;"><input type="radio" name="play-format" id="play-format-timeattack" value="timeattack"> タイムアタック</label>
+    <label><input type="radio" name="play-format" id="play-format-hardcore" value="hardcore"> ハードコア(1ミスで終了)</label>
+  </div>
+
+  <div id="timeattack-seconds-wrapper" style="margin-top: 12px; display:none;">
+    <label style="color: var(--status-text);">制限時間(秒):
+      <input type="number" id="timeattack-seconds" value="60" min="5" max="600" style="width:70px; padding:4px 8px;">
+    </label>
+  </div>
+
   <div style="margin-top: 25px; padding-top: 20px; border-top: 1px solid var(--border-line);">
     <button class="load-btn" onclick="document.getElementById('folder-input').click();">
       📁 フォルダから自作テキスト(.txt)を読み込む
     </button>
     <input type="file" id="folder-input" webkitdirectory directory multiple style="display: none;">
   </div>
+</div>
+
+<div id="hardcore-fail-overlay" style="display:none; position:fixed; inset:0; background:rgba(252,251,249,0.96); z-index:500; flex-direction:column; align-items:center; justify-content:center; text-align:center;">
+  <div style="font-size:32px; color:#e11d48; font-weight:bold; margin-bottom:16px;">ミスで終了(ハードコア)</div>
+  <button onclick="retryHardcore()" class="load-btn" style="font-size: 18px; padding: 12px 30px;">もう一度挑戦</button>
 </div>
 
 <div class="main-layout">
@@ -446,6 +489,7 @@
 <div class="side-column">
 <div id="stats-sidebar">
   <div class="side-panel">
+    <button id="pause-status-btn" type="button">Zキーで開始</button>
     <div class="metric-row"><span>進捗</span><span class="metric-value" id="stat-progress">0 / 0</span></div>
     <div class="metric-row"><span>時間</span><span class="metric-value" id="stat-time">0.0s</span></div>
   </div>
@@ -549,6 +593,23 @@
   let gameInterval = null;
   let gameWordsPool = [];
   let currentWordObj = null;
+
+  // ★ 出題順・プレイ形式・Zキー開始/一時停止
+  let orderMode = 'sequential'; // 'sequential' | 'random'
+  let playFormat = 'normal'; // 'normal' | 'timeattack' | 'hardcore'
+  let timeAttackSeconds = 60;
+  let sessionStarted = false;
+  let isPaused = false;
+  let isSessionOver = false;
+  let pauseStartedAt = null;
+  let pausedDurationTotal = 0;
+
+  // 一時停止中に経過した時間を除いた「実質経過秒数」を返す
+  function getElapsedSeconds(baseStartTime) {
+    if (!baseStartTime) return 0;
+    let pausedMs = pausedDurationTotal + (isPaused && pauseStartedAt ? (Date.now() - pauseStartedAt) : 0);
+    return Math.max(0, (Date.now() - baseStartTime - pausedMs) / 1000);
+  }
 
   let normalInputValue = "";
   let gameInputValue = "";
@@ -734,6 +795,7 @@
         if (!kanaStats[targetKana]) kanaStats[targetKana] = { timeSum: 0, timeCount: 0, missCount: 0 };
         kanaStats[targetKana].missCount++;
       }
+      if (playFormat === 'hardcore') endHardcoreSession();
     } else {
       statsKpm1++;
     }
@@ -1023,7 +1085,7 @@
     startTime = Date.now();
     clearInterval(timerInterval);
     timerInterval = setInterval(() => {
-      const elapsed = (Date.now() - startTime) / 1000;
+      const elapsed = getElapsedSeconds(startTime);
       setTimeText(elapsed.toFixed(1) + 's');
       updateStatsPanel(elapsed);
       renderHeatmap();
@@ -1062,15 +1124,147 @@
     settingsPanel.style.display = 'none';
   });
 
+  // ★ 出題順・プレイ形式の設定UI
+  const timeattackSecondsWrapper = document.getElementById('timeattack-seconds-wrapper');
+  const timeattackSecondsInput = document.getElementById('timeattack-seconds');
+
+  document.querySelectorAll('input[name="order-mode"]').forEach(radio => {
+    radio.addEventListener('change', () => {
+      if (radio.checked) {
+        orderMode = radio.value;
+        if (courseSelect.value) loadCourse(courseSelect.value);
+      }
+    });
+  });
+
+  document.querySelectorAll('input[name="play-format"]').forEach(radio => {
+    radio.addEventListener('change', () => {
+      if (radio.checked) {
+        playFormat = radio.value;
+        timeattackSecondsWrapper.style.display = (playFormat === 'timeattack') ? 'block' : 'none';
+        if (courseSelect.value) loadCourse(courseSelect.value);
+      }
+    });
+  });
+
+  timeattackSecondsInput.addEventListener('change', () => {
+    const v = parseInt(timeattackSecondsInput.value, 10);
+    timeAttackSeconds = (!isNaN(v) && v > 0) ? v : 60;
+    timeattackSecondsInput.value = timeAttackSeconds;
+    if (playFormat === 'timeattack' && courseSelect.value) loadCourse(courseSelect.value);
+  });
+
+  // ★ Zキーでスタート/一時停止
+  // "z"はromantable.txt上どのキー組み合わせにも使われていないため、
+  // 実際の入力と衝突せず全体制御キーとして安全に使える。
+  // 一時停止は全画面オーバーレイにすると画面(進捗やヒートマップ)が
+  // 見えなくなってしまうため、進捗欄の上の小さなボタンで状態を示す。
+  function updatePauseButton() {
+    const btn = document.getElementById('pause-status-btn');
+    if (!sessionStarted) {
+      btn.textContent = 'Zキーで開始';
+      btn.className = 'ready';
+    } else if (isPaused) {
+      btn.textContent = '一時停止中(クリックで再開)';
+      btn.className = 'paused';
+    } else {
+      btn.textContent = 'プレイ中(クリックで一時停止)';
+      btn.className = 'playing';
+    }
+  }
+
+  function beginSession() {
+    sessionStarted = true;
+    if (pauseStartedAt) pausedDurationTotal += Date.now() - pauseStartedAt;
+    isPaused = false;
+    pauseStartedAt = null;
+    updatePauseButton();
+    focusActiveInput();
+  }
+
+  function togglePause() {
+    isPaused = !isPaused;
+    if (isPaused) {
+      pauseStartedAt = Date.now();
+    } else {
+      if (pauseStartedAt) pausedDurationTotal += Date.now() - pauseStartedAt;
+      pauseStartedAt = null;
+      focusActiveInput();
+    }
+    updatePauseButton();
+  }
+
+  document.getElementById('pause-status-btn').addEventListener('click', () => {
+    if (isSessionOver) return;
+    if (!sessionStarted) beginSession(); else togglePause();
+  });
+
+  function focusActiveInput() {
+    if (isGameMode) {
+      const gameInput = document.getElementById('game-real-input');
+      if (gameInput && gameInput.style.display !== 'none') gameInput.focus();
+    } else {
+      const activeInput = document.querySelector('#text-container .real-input');
+      if (activeInput) activeInput.focus();
+    }
+  }
+
+  // capture:trueで各行のkeydownハンドラより先に横取りし、stopPropagation()で
+  // 実際のタイピング処理(通常文字として'z'が入力されてしまうこと)を防ぐ。
+  document.addEventListener('keydown', (e) => {
+    if (e.key.toLowerCase() !== 'z') return;
+    e.preventDefault();
+    e.stopPropagation();
+    if (isSessionOver) return;
+    if (!sessionStarted) {
+      beginSession();
+    } else {
+      togglePause();
+    }
+  }, { capture: true });
+
+  // Zキーが押されるまで/一時停止中は待機状態にする。「未開始」は
+  // 「一時停止中(pauseStartedAt=読み込み時刻)」として扱うことで、
+  // getElapsedSecondsが自動的に0秒のまま止めてくれる。
+  function resetSessionGate() {
+    sessionStarted = false;
+    isPaused = true;
+    isSessionOver = false;
+    pauseStartedAt = Date.now();
+    pausedDurationTotal = 0;
+    document.getElementById('hardcore-fail-overlay').style.display = 'none';
+    updatePauseButton();
+  }
+
+  // ハードコアモード: ミスした瞬間にセッションを即終了する
+  function endHardcoreSession() {
+    if (isSessionOver) return;
+    isSessionOver = true;
+    isPaused = true;
+    clearInterval(timerInterval);
+    clearInterval(gameInterval);
+    document.getElementById('hardcore-fail-overlay').style.display = 'flex';
+  }
+
+  window.retryHardcore = function() {
+    if (courseSelect.value) loadCourse(courseSelect.value);
+  };
+
   function loadCourse(courseName) {
     const rawLines = courseData[courseName];
-    parsedCourse = rawLines.map(line => {
+    let parsed = rawLines.map(line => {
       const tokens = parseAozora(line);
       const targetLine = tokens.map(t => t.target).join('');
       return { rawLine: line, tokens, targetLine };
     });
+    if (orderMode === 'random') {
+      parsed = [...parsed].sort(() => Math.random() - 0.5);
+    }
+    parsedCourse = parsed;
 
-    if (courseName.includes("ゲーム")) {
+    resetSessionGate();
+
+    if (playFormat === 'timeattack') {
       isGameMode = true;
       document.getElementById('text-container').style.display = 'none';
       document.getElementById('game-board').style.display = 'block';
@@ -1082,12 +1276,15 @@
       
       currentIndex = 0;
       totalChars = 0;
-      startTime = null;
-      clearInterval(timerInterval);
       clearInterval(gameInterval);
       resetSessionStats();
-      
       setTimeText('0.0s');
+
+      // ゲームモードと同様、読み込み時点でタイマーを開始しておき、
+      // Zを押すまではresetSessionGate()のisPaused=trueによって
+      // 経過時間が0のまま止まるようにする(Z押下と同時に計測開始させるため、
+      // 最初のキー入力まで待たない)。
+      startTimer();
 
       textContainer.innerHTML = '';
       parsedCourse.forEach((parsed, index) => {
@@ -1106,29 +1303,34 @@
     }
   }
 
+  // 出題順設定に応じて出題プールを作る(順番なら並び替えない、ランダムならシャッフル)
+  function buildWordPool(source) {
+    return orderMode === 'random' ? [...source].sort(() => Math.random() - 0.5) : [...source];
+  }
+
   function startGame(wordsArray) {
-    gameWordsPool = [...wordsArray].sort(() => Math.random() - 0.5);
+    gameWordsPool = buildWordPool(wordsArray);
     gameScore = 0;
-    gameTimer = 60.0;
+    gameTimer = timeAttackSeconds;
     totalChars = 0;
     startTime = Date.now();
     resetSessionStats();
-    
+
     document.getElementById('game-score-val').innerText = gameScore;
     document.getElementById('game-time-text').innerText = gameTimer.toFixed(1);
-    
+
     const inputField = document.getElementById('game-real-input');
     inputField.style.display = 'block';
-    
+
     clearInterval(timerInterval);
     clearInterval(gameInterval);
     gameInterval = setInterval(() => {
-      let elapsed = (Date.now() - startTime) / 1000;
-      gameTimer = Math.max(0, 60.0 - elapsed);
-      
+      let elapsed = getElapsedSeconds(startTime);
+      gameTimer = Math.max(0, timeAttackSeconds - elapsed);
+
       document.getElementById('game-time-text').innerText = gameTimer.toFixed(1);
-      document.getElementById('game-timer-fill').style.width = (gameTimer / 60 * 100) + '%';
-      
+      document.getElementById('game-timer-fill').style.width = (gameTimer / timeAttackSeconds * 100) + '%';
+
       setTimeText(elapsed.toFixed(1) + 's');
       updateStatsPanel(elapsed);
       renderHeatmap();
@@ -1144,9 +1346,9 @@
 
   function nextGameWord() {
     if (gameWordsPool.length === 0) {
-        gameWordsPool = [...parsedCourse].sort(() => Math.random() - 0.5);
+        gameWordsPool = buildWordPool(parsedCourse);
     }
-    currentWordObj = gameWordsPool.pop();
+    currentWordObj = gameWordsPool.shift();
     gameInputValue = '';
     
     const visualWrapper = document.getElementById('game-visual-wrapper');
@@ -1301,6 +1503,7 @@
 
   gameInputEl.addEventListener('keydown', function(e) {
     if(gameTimer <= 0) return;
+    if (!sessionStarted || isPaused) return;
 
     if (e.code === 'CapsLock' || e.key === 'Alphanumeric' || e.code === 'Lang2' || e.key === 'Backspace') {
       e.preventDefault();
@@ -1604,6 +1807,7 @@
           };
 
           inputField.addEventListener('keydown', (e) => {
+            if (!sessionStarted || isPaused) return;
             if (e.code === 'CapsLock' || e.key === 'Alphanumeric' || e.code === 'Lang2' || e.key === 'Backspace') {
               e.preventDefault();
               normalInputValue = deleteOneVisibleChar(normalInputValue);
