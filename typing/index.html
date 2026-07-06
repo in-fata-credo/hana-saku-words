@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>花咲く言葉 (HSW配列) - タイピングプラクティス v2.0</title>
+<title>花咲く言葉 (HSW配列) - タイピングプラクティス β2.1</title>
 <style>
   :root {
     --bg-color: #fcfbf9; 
@@ -234,6 +234,21 @@
   }
   .metric-value.warn { color: #e11d48; }
 
+  #stat-progress {
+    cursor: pointer;
+    border-bottom: 1px dashed var(--status-text);
+  }
+  #stat-progress-input {
+    width: 55px;
+    font-size: 15px;
+    font-weight: bold;
+    font-family: inherit;
+    color: var(--text-completed);
+    border: 1px solid var(--border-line);
+    border-radius: 4px;
+    padding: 1px 4px;
+  }
+
   #pause-status-btn {
     display: block;
     width: 100%;
@@ -419,7 +434,7 @@
 <body>
 
 <div class="header">
-  <h2>✿ 花咲く言葉 - タイピングの庭 v2.0</h2>
+  <h2>✿ 花咲く言葉 - タイピングの庭 β2.1</h2>
   <button class="settings-btn" id="toggle-settings" title="設定・コース選択">⚙️</button>
 </div>
 
@@ -1199,6 +1214,51 @@
     if (!sessionStarted) beginSession(); else togglePause();
   });
 
+  // ★ 進捗ジャンプ機能: 「進捗」をクリックすると数字入力欄になり、
+  // Enterで任意の位置(currentIndex)まで一気に進む/戻れる。
+  document.getElementById('stat-progress').addEventListener('click', (evClick) => {
+    evClick.stopPropagation();
+    if (isGameMode || !parsedCourse.length) return;
+    const display = document.getElementById('stat-progress');
+    const total = parsedCourse.length;
+    const before = currentIndex;
+
+    const input = document.createElement('input');
+    input.type = 'number';
+    input.id = 'stat-progress-input';
+    input.min = 0;
+    input.max = total;
+    input.value = before;
+
+    display.replaceWith(input);
+    input.focus();
+    input.select();
+
+    let settled = false;
+    function commit() {
+      if (settled) return;
+      settled = true;
+      let v = parseInt(input.value, 10);
+      if (isNaN(v)) v = before;
+      v = Math.max(0, Math.min(total, v));
+      currentIndex = v;
+      input.replaceWith(display);
+      renderLines();
+      updateStatus();
+    }
+    function cancel() {
+      if (settled) return;
+      settled = true;
+      input.replaceWith(display);
+    }
+    input.addEventListener('keydown', (e) => {
+      e.stopPropagation();
+      if (e.key === 'Enter') { e.preventDefault(); commit(); }
+      else if (e.key === 'Escape') { e.preventDefault(); cancel(); }
+    });
+    input.addEventListener('blur', commit);
+  });
+
   function focusActiveInput() {
     if (isGameMode) {
       const gameInput = document.getElementById('game-real-input');
@@ -1860,7 +1920,7 @@
   }
 
   document.addEventListener('click', (e) => {
-    if (e.target.closest('#toggle-settings') || e.target.closest('#settings-panel') || e.target.closest('.load-btn')) return;
+    if (e.target.closest('#toggle-settings') || e.target.closest('#settings-panel') || e.target.closest('.load-btn') || e.target.closest('#stat-progress') || e.target.closest('#stat-progress-input')) return;
     
     if (isGameMode) {
        const gameInput = document.getElementById('game-real-input');
