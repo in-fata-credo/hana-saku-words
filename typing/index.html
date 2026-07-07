@@ -644,6 +644,9 @@
   let lastKeyTimestamp = null;
   let skipNextTimingGap = true;
   let nextExpectedKey = null;
+  // ★ ミス直後でも、まだ確定前(カタカナ等)の状態を打ち直さずに
+  // そのまま正しいモーラへ導けるキーがあれば、その「回復キー」も案内する
+  let nextRecoveryKey = null;
 
   // ============================================================
   // ルート予測アルゴリズムとプレフィックス管理
@@ -728,6 +731,19 @@
       return str.substring(0, 1);
   }
 
+  // ミス扱いになった直後でも、まだ確定前(カタカナ等)の状態は後続のキーで
+  // 正しいモーラへ作り変えられることがある(例:「ア」+r→「ラ」)。
+  // 打ち直し(CapsLock)以外に、そのまま続けて正解へ導けるキーがあれば
+  // それも「回復キー」として返す(無ければnull)。
+  function findRecoveryKey(currentPartial, recipe, goal) {
+      if (!currentPartial) return null;
+      for (const k of validKeyChars) {
+          const next = applyCustomIME(currentPartial + k);
+          if (next === goal || (next in recipe)) return k;
+      }
+      return null;
+  }
+
   // targetReadingを「拗音は2文字1組」というモーラ単位に分割する。
   // 一致数カウント(matchLen)がこの単位を無視すると、拗音の1文字目だけで
   // 「打ち終わった」と誤認識し、次に打つキーの案内が振り出しに戻ってしまう。
@@ -760,6 +776,7 @@
     lastKeyTimestamp = null;
     skipNextTimingGap = true;
     nextExpectedKey = null;
+    nextRecoveryKey = null;
     renderHeatmap();
     renderMistakeList();
     updateStatsPanel(0);
@@ -936,7 +953,7 @@
           bg = timeToColor(avgTime, minT, maxT);
           if (s.missCount > 0) missBadge = `<span class="kb-miss-badge">${s.missCount}</span>`;
         }
-        const highlightClass = (keyObj.id === nextExpectedKey) ? ' next-highlight' : '';
+        const highlightClass = (keyObj.id === nextExpectedKey || keyObj.id === nextRecoveryKey) ? ' next-highlight' : '';
         const widthStyle = keyObj.width ? `width: ${keyObj.width};` : '';
         html += `<div class="kb-key${highlightClass}" id="kb-key-${keyObj.id}" style="background-color:${bg}; ${widthStyle}">${escapeHTML(keyObj.label)}${missBadge}</div>`;
       });
@@ -1494,14 +1511,22 @@
                 const prevEl = document.getElementById('kb-key-' + nextExpectedKey);
                 if (prevEl) prevEl.classList.remove('next-highlight');
             }
+            if (nextRecoveryKey) {
+                const prevRecEl = document.getElementById('kb-key-' + nextRecoveryKey);
+                if (prevRecEl) prevRecEl.classList.remove('next-highlight');
+            }
 
             // ★ 修正後の次キー表示・無効キー判定ロジック
+            nextRecoveryKey = null;
             if (!isValid) {
                 // 配列に定義されていないキーを打った場合は無反応
                 if (extra.length === 1 && !validMapPrefixes.has(extra)) {
                     nextExpectedKey = null;
                 } else {
                     nextExpectedKey = 'capslock'; // 修正不可能ならCapsを案内
+                    // ★ 打ち直さなくても、そのまま続けて正解へ導けるキーがあれば案内する
+                    const recKey = findRecoveryKey(extra, recipe, kataToHira(nextKana));
+                    if (recKey) nextRecoveryKey = recKey.toLowerCase();
                 }
             } else {
                 let nextKey = recipe[extra];
@@ -1511,6 +1536,10 @@
             if (nextExpectedKey) {
                 const nextEl = document.getElementById('kb-key-' + nextExpectedKey);
                 if (nextEl) nextEl.classList.add('next-highlight');
+            }
+            if (nextRecoveryKey) {
+                const nextRecEl = document.getElementById('kb-key-' + nextRecoveryKey);
+                if (nextRecEl) nextRecEl.classList.add('next-highlight');
             }
 
             let typedText = "";
@@ -1764,13 +1793,21 @@
                     const prevEl = document.getElementById('kb-key-' + nextExpectedKey);
                     if (prevEl) prevEl.classList.remove('next-highlight');
                 }
+                if (nextRecoveryKey) {
+                    const prevRecEl = document.getElementById('kb-key-' + nextRecoveryKey);
+                    if (prevRecEl) prevRecEl.classList.remove('next-highlight');
+                }
 
                 // ★ 修正後の次キー表示・無効キー判定ロジック
+                nextRecoveryKey = null;
                 if (!isValid) {
                     if (extra.length === 1 && !validMapPrefixes.has(extra)) {
                         nextExpectedKey = null;
                     } else {
                         nextExpectedKey = 'capslock';
+                        // ★ 打ち直さなくても、そのまま続けて正解へ導けるキーがあれば案内する
+                        const recKey = findRecoveryKey(extra, recipe, kataToHira(nextKana));
+                        if (recKey) nextRecoveryKey = recKey.toLowerCase();
                     }
                 } else {
                     let nextKey = recipe[extra];
@@ -1780,6 +1817,10 @@
                 if (nextExpectedKey) {
                     const nextEl = document.getElementById('kb-key-' + nextExpectedKey);
                     if (nextEl) nextEl.classList.add('next-highlight');
+                }
+                if (nextRecoveryKey) {
+                    const nextRecEl = document.getElementById('kb-key-' + nextRecoveryKey);
+                    if (nextRecEl) nextRecEl.classList.add('next-highlight');
                 }
 
                 let typedText = "";
