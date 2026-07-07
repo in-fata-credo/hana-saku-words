@@ -735,11 +735,28 @@
   // 正しいモーラへ作り変えられることがある(例:「ア」+r→「ラ」)。
   // 打ち直し(CapsLock)以外に、そのまま続けて正解へ導けるキーがあれば
   // それも「回復キー」として返す(無ければnull)。
+  // まず1打鍵で正規ルートに合流できないか調べ、ダメなら2打鍵で合流できる
+  // ルートも探す(例:「ナ」から f,f で「ア」に合流→以降は通常ルート)。
+  // 1打鍵で合流できるなら、わざわざ2打鍵の遠回りルートは案内しない
+  // (1打鍵の結果を優先し、2打鍵探索はそのフォールバックとしてのみ行う)。
+  // 2打鍵ルートが複数見つかる場合、異なるキーの組み合わせより「同じキーを
+  // 2回連打」の方が覚えやすく打ちやすいため、まず連打パターンを優先して探す。
   function findRecoveryKey(currentPartial, recipe, goal) {
       if (!currentPartial) return null;
       for (const k of validKeyChars) {
           const next = applyCustomIME(currentPartial + k);
           if (next === goal || (next in recipe)) return k;
+      }
+      for (const k1 of validKeyChars) {
+          const next2 = applyCustomIME(applyCustomIME(currentPartial + k1) + k1);
+          if (next2 === goal || (next2 in recipe)) return k1;
+      }
+      for (const k1 of validKeyChars) {
+          const mid = applyCustomIME(currentPartial + k1);
+          for (const k2 of validKeyChars) {
+              const next2 = applyCustomIME(mid + k2);
+              if (next2 === goal || (next2 in recipe)) return k1;
+          }
       }
       return null;
   }
