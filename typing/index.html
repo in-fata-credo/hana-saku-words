@@ -643,10 +643,13 @@
 
   let lastKeyTimestamp = null;
   let skipNextTimingGap = true;
-  let nextExpectedKey = null;
+  // ★ 正規ルートが複数ある場合(例:「バ」はw→fでもf→wでも到達できる)は
+  // 候補キーを全てハイライトしたいので、単一キーではなく配列で保持する
+  let nextExpectedKeys = [];
   // ★ ミス直後でも、まだ確定前(カタカナ等)の状態を打ち直さずに
   // そのまま正しいモーラへ導けるキーがあれば、その「回復キー」も案内する
-  let nextRecoveryKey = null;
+  // (これも候補が複数あり得るため配列で保持する)
+  let nextRecoveryKeys = [];
 
   // ============================================================
   // ルート予測アルゴリズムとプレフィックス管理
@@ -677,42 +680,64 @@
       recipeCache = {};
   }
 
-  // 指定した「かな」を打つための正しい状態遷移辞書（レシピ）を生成・キャッシュする
+  // 指定した「かな」を打つための正しい状態遷移辞書（レシピ）を生成・キャッシュする。
+  // 例:「バ」は w→f(ハ経由)でもf→w(ア経由)でも同じ2打鍵で到達でき、どちらも
+  // 正規ルートとして扱いたい。そのため最短手数の経路を1本だけ記録するのではなく、
+  // 同じ最短手数で到達できる経路をすべて洗い出し、そこに含まれる中間状態は
+  // すべて有効(ミス扱いにしない)と判定できるようにする。
   function getRecipe(targetStr) {
       if (!targetStr) return {};
       if (recipeCache[targetStr]) return recipeCache[targetStr];
 
-      let validStates = {};
-      let queue = [ { text: "", path: [] } ];
-      let visited = new Set([""]);
-      let foundPath = null;
+      // 1段階目: 幅優先探索で各状態への最短到達手数(depth)を求めつつ、
+      // 「その手数で到達できる」遷移(from → key → to)を全て記録しておく
+      // (同じ深さに複数のルートで辿り着く場合も両方残す)。
+      let depth = { "": 0 };
+      let edges = []; // { from, key, to, depth(=toの深さ) }
+      let frontier = [""];
+      let goalDepth = (targetStr === "") ? 0 : null;
 
-      while(queue.length > 0) {
-          let curr = queue.shift();
-
-          if (curr.text === targetStr) {
-              foundPath = curr.path;
-              break;
-          }
-          if (curr.path.length >= 5) continue; // HSWの1文字/拗音入力は最大でも4手程度
-
-          // 中間状態が目標文字数を超えて伸びることはほぼ無い(customKeyMapは
-          // ローマ字を「同じか短い」かなに畳み込む設計のため)。+1猶予を許すと
-          // 無関係なゴミ状態が指数的に増え、拗音(2文字)の探索が数秒かかっていた。
-          for (let c of validKeyChars) {
-              let nextText = applyCustomIME(curr.text + c);
-              if (nextText.length <= targetStr.length && !visited.has(nextText)) {
-                  visited.add(nextText);
-                  queue.push({ text: nextText, path: [...curr.path, c] });
+      for (let d = 0; frontier.length > 0 && goalDepth === null && d < 5; d++) {
+          let nextFrontierSet = new Set();
+          for (const state of frontier) {
+              for (const c of validKeyChars) {
+                  const nextText = applyCustomIME(state + c);
+                  // 中間状態が目標文字数を超えて伸びることはほぼ無い(customKeyMapは
+                  // ローマ字を「同じか短い」かなに畳み込む設計のため)。+1猶予を許すと
+                  // 無関係なゴミ状態が指数的に増え、拗音(2文字)の探索が数秒かかっていた。
+                  if (nextText.length > targetStr.length) continue;
+                  if (!(nextText in depth)) {
+                      depth[nextText] = d + 1;
+                      edges.push({ from: state, key: c, to: nextText, depth: d + 1 });
+                      nextFrontierSet.add(nextText);
+                  } else if (depth[nextText] === d + 1) {
+                      // 既知の状態に、同じ最短手数で辿り着く別ルートを発見
+                      edges.push({ from: state, key: c, to: nextText, depth: d + 1 });
+                  }
               }
           }
+          if (targetStr in depth) goalDepth = depth[targetStr];
+          frontier = Array.from(nextFrontierSet);
       }
 
-      if (foundPath) {
-          let state = "";
-          for (let i = 0; i < foundPath.length; i++) {
-              validStates[state] = foundPath[i];
-              state = applyCustomIME(state + foundPath[i]);
+      // 2段階目: ゴールから逆向きに辿り、「最短手数のいずれかの経路上にある」
+      // 状態だけを有効な中間状態として抽出する(depthが同じでも無関係な
+      // 袋小路の状態を誤って正解に含めないため)。各状態につき、そこから
+      // 最短ルートを継続できるキーは複数ありうる(例:「バ」への「」状態は
+      // w・fどちらも正解)ので、1つに絞らず全て配列で持つ。
+      let validStates = {};
+      if (goalDepth !== null) {
+          let validAtDepth = new Set([targetStr]);
+          for (let d = goalDepth; d >= 1; d--) {
+              let prevValid = new Set();
+              for (const e of edges) {
+                  if (e.depth === d && validAtDepth.has(e.to)) {
+                      prevValid.add(e.from);
+                      if (!validStates[e.from]) validStates[e.from] = [];
+                      if (!validStates[e.from].includes(e.key)) validStates[e.from].push(e.key);
+                  }
+              }
+              validAtDepth = prevValid;
           }
       }
       recipeCache[targetStr] = validStates;
@@ -734,31 +759,40 @@
   // ミス扱いになった直後でも、まだ確定前(カタカナ等)の状態は後続のキーで
   // 正しいモーラへ作り変えられることがある(例:「ア」+r→「ラ」)。
   // 打ち直し(CapsLock)以外に、そのまま続けて正解へ導けるキーがあれば
-  // それも「回復キー」として返す(無ければnull)。
+  // それも「回復キー」として返す(無ければ空配列)。
   // まず1打鍵で正規ルートに合流できないか調べ、ダメなら2打鍵で合流できる
   // ルートも探す(例:「ナ」から f,f で「ア」に合流→以降は通常ルート)。
   // 1打鍵で合流できるなら、わざわざ2打鍵の遠回りルートは案内しない
   // (1打鍵の結果を優先し、2打鍵探索はそのフォールバックとしてのみ行う)。
   // 2打鍵ルートが複数見つかる場合、異なるキーの組み合わせより「同じキーを
   // 2回連打」の方が覚えやすく打ちやすいため、まず連打パターンを優先して探す。
-  function findRecoveryKey(currentPartial, recipe, goal) {
-      if (!currentPartial) return null;
+  // また、同じ段(1打鍵/連打/2打鍵)の中で候補が複数見つかった場合は、
+  // その段の候補を全てまとめて返す(ナビゲーターで同時にハイライトするため)。
+  function findRecoveryKeys(currentPartial, recipe, goal) {
+      if (!currentPartial) return [];
+      let depth1 = [];
       for (const k of validKeyChars) {
           const next = applyCustomIME(currentPartial + k);
-          if (next === goal || (next in recipe)) return k;
+          if (next === goal || (next in recipe)) depth1.push(k);
       }
+      if (depth1.length > 0) return depth1;
+
+      let doubleTap = [];
       for (const k1 of validKeyChars) {
           const next2 = applyCustomIME(applyCustomIME(currentPartial + k1) + k1);
-          if (next2 === goal || (next2 in recipe)) return k1;
+          if (next2 === goal || (next2 in recipe)) doubleTap.push(k1);
       }
+      if (doubleTap.length > 0) return doubleTap;
+
+      let anyTwo = [];
       for (const k1 of validKeyChars) {
           const mid = applyCustomIME(currentPartial + k1);
           for (const k2 of validKeyChars) {
               const next2 = applyCustomIME(mid + k2);
-              if (next2 === goal || (next2 in recipe)) return k1;
+              if (next2 === goal || (next2 in recipe)) { anyTwo.push(k1); break; }
           }
       }
-      return null;
+      return anyTwo;
   }
 
   // targetReadingを「拗音は2文字1組」というモーラ単位に分割する。
@@ -792,8 +826,8 @@
     kanaStats = {};
     lastKeyTimestamp = null;
     skipNextTimingGap = true;
-    nextExpectedKey = null;
-    nextRecoveryKey = null;
+    nextExpectedKeys = [];
+    nextRecoveryKeys = [];
     renderHeatmap();
     renderMistakeList();
     updateStatsPanel(0);
@@ -970,7 +1004,7 @@
           bg = timeToColor(avgTime, minT, maxT);
           if (s.missCount > 0) missBadge = `<span class="kb-miss-badge">${s.missCount}</span>`;
         }
-        const highlightClass = (keyObj.id === nextExpectedKey || keyObj.id === nextRecoveryKey) ? ' next-highlight' : '';
+        const highlightClass = (nextExpectedKeys.includes(keyObj.id) || nextRecoveryKeys.includes(keyObj.id)) ? ' next-highlight' : '';
         const widthStyle = keyObj.width ? `width: ${keyObj.width};` : '';
         html += `<div class="kb-key${highlightClass}" id="kb-key-${keyObj.id}" style="background-color:${bg}; ${widthStyle}">${escapeHTML(keyObj.label)}${missBadge}</div>`;
       });
@@ -1524,39 +1558,46 @@
             let extra = remainingVal.substring(currentMatch);
             let isValid = (extra in recipe) || (extra === "");
 
-            if (nextExpectedKey) {
-                const prevEl = document.getElementById('kb-key-' + nextExpectedKey);
-                if (prevEl) prevEl.classList.remove('next-highlight');
+            if (nextExpectedKeys.length > 0) {
+                nextExpectedKeys.forEach(k => {
+                    const prevEl = document.getElementById('kb-key-' + k);
+                    if (prevEl) prevEl.classList.remove('next-highlight');
+                });
             }
-            if (nextRecoveryKey) {
-                const prevRecEl = document.getElementById('kb-key-' + nextRecoveryKey);
-                if (prevRecEl) prevRecEl.classList.remove('next-highlight');
+            if (nextRecoveryKeys.length > 0) {
+                nextRecoveryKeys.forEach(k => {
+                    const prevRecEl = document.getElementById('kb-key-' + k);
+                    if (prevRecEl) prevRecEl.classList.remove('next-highlight');
+                });
             }
 
             // ★ 修正後の次キー表示・無効キー判定ロジック
-            nextRecoveryKey = null;
+            nextRecoveryKeys = [];
             if (!isValid) {
                 // 配列に定義されていないキーを打った場合は無反応
                 if (extra.length === 1 && !validMapPrefixes.has(extra)) {
-                    nextExpectedKey = null;
+                    nextExpectedKeys = [];
                 } else {
-                    nextExpectedKey = 'capslock'; // 修正不可能ならCapsを案内
+                    nextExpectedKeys = ['capslock']; // 修正不可能ならCapsを案内
                     // ★ 打ち直さなくても、そのまま続けて正解へ導けるキーがあれば案内する
-                    const recKey = findRecoveryKey(extra, recipe, kataToHira(nextKana));
-                    if (recKey) nextRecoveryKey = recKey.toLowerCase();
+                    nextRecoveryKeys = findRecoveryKeys(extra, recipe, kataToHira(nextKana)).map(k => k.toLowerCase());
                 }
             } else {
-                let nextKey = recipe[extra];
-                nextExpectedKey = nextKey ? nextKey.toLowerCase() : null;
+                let nextKeys = recipe[extra];
+                nextExpectedKeys = nextKeys ? nextKeys.map(k => k.toLowerCase()) : [];
             }
 
-            if (nextExpectedKey) {
-                const nextEl = document.getElementById('kb-key-' + nextExpectedKey);
-                if (nextEl) nextEl.classList.add('next-highlight');
+            if (nextExpectedKeys.length > 0) {
+                nextExpectedKeys.forEach(k => {
+                    const nextEl = document.getElementById('kb-key-' + k);
+                    if (nextEl) nextEl.classList.add('next-highlight');
+                });
             }
-            if (nextRecoveryKey) {
-                const nextRecEl = document.getElementById('kb-key-' + nextRecoveryKey);
-                if (nextRecEl) nextRecEl.classList.add('next-highlight');
+            if (nextRecoveryKeys.length > 0) {
+                nextRecoveryKeys.forEach(k => {
+                    const nextRecEl = document.getElementById('kb-key-' + k);
+                    if (nextRecEl) nextRecEl.classList.add('next-highlight');
+                });
             }
 
             let typedText = "";
@@ -1806,38 +1847,45 @@
                 let extra = remainingVal.substring(currentMatch);
                 let isValid = (extra in recipe) || (extra === "");
 
-                if (nextExpectedKey) {
-                    const prevEl = document.getElementById('kb-key-' + nextExpectedKey);
-                    if (prevEl) prevEl.classList.remove('next-highlight');
+                if (nextExpectedKeys.length > 0) {
+                    nextExpectedKeys.forEach(k => {
+                        const prevEl = document.getElementById('kb-key-' + k);
+                        if (prevEl) prevEl.classList.remove('next-highlight');
+                    });
                 }
-                if (nextRecoveryKey) {
-                    const prevRecEl = document.getElementById('kb-key-' + nextRecoveryKey);
-                    if (prevRecEl) prevRecEl.classList.remove('next-highlight');
+                if (nextRecoveryKeys.length > 0) {
+                    nextRecoveryKeys.forEach(k => {
+                        const prevRecEl = document.getElementById('kb-key-' + k);
+                        if (prevRecEl) prevRecEl.classList.remove('next-highlight');
+                    });
                 }
 
                 // ★ 修正後の次キー表示・無効キー判定ロジック
-                nextRecoveryKey = null;
+                nextRecoveryKeys = [];
                 if (!isValid) {
                     if (extra.length === 1 && !validMapPrefixes.has(extra)) {
-                        nextExpectedKey = null;
+                        nextExpectedKeys = [];
                     } else {
-                        nextExpectedKey = 'capslock';
+                        nextExpectedKeys = ['capslock'];
                         // ★ 打ち直さなくても、そのまま続けて正解へ導けるキーがあれば案内する
-                        const recKey = findRecoveryKey(extra, recipe, kataToHira(nextKana));
-                        if (recKey) nextRecoveryKey = recKey.toLowerCase();
+                        nextRecoveryKeys = findRecoveryKeys(extra, recipe, kataToHira(nextKana)).map(k => k.toLowerCase());
                     }
                 } else {
-                    let nextKey = recipe[extra];
-                    nextExpectedKey = nextKey ? nextKey.toLowerCase() : null;
+                    let nextKeys = recipe[extra];
+                    nextExpectedKeys = nextKeys ? nextKeys.map(k => k.toLowerCase()) : [];
                 }
 
-                if (nextExpectedKey) {
-                    const nextEl = document.getElementById('kb-key-' + nextExpectedKey);
-                    if (nextEl) nextEl.classList.add('next-highlight');
+                if (nextExpectedKeys.length > 0) {
+                    nextExpectedKeys.forEach(k => {
+                        const nextEl = document.getElementById('kb-key-' + k);
+                        if (nextEl) nextEl.classList.add('next-highlight');
+                    });
                 }
-                if (nextRecoveryKey) {
-                    const nextRecEl = document.getElementById('kb-key-' + nextRecoveryKey);
-                    if (nextRecEl) nextRecEl.classList.add('next-highlight');
+                if (nextRecoveryKeys.length > 0) {
+                    nextRecoveryKeys.forEach(k => {
+                        const nextRecEl = document.getElementById('kb-key-' + k);
+                        if (nextRecEl) nextRecEl.classList.add('next-highlight');
+                    });
                 }
 
                 let typedText = "";
