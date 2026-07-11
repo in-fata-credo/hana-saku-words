@@ -471,7 +471,8 @@
 
 <div id="hardcore-fail-overlay" style="display:none; position:fixed; inset:0; background:rgba(252,251,249,0.96); z-index:500; flex-direction:column; align-items:center; justify-content:center; text-align:center;">
   <div style="font-size:32px; color:#e11d48; font-weight:bold; margin-bottom:16px;">ミスで終了(ハードコア)</div>
-  <button onclick="retryHardcore()" class="load-btn" style="font-size: 18px; padding: 12px 30px;">もう一度挑戦</button>
+  <div id="hardcore-fail-stats" style="font-family: sans-serif; width: 260px; text-align:left; background:#fff; border:1px solid var(--border-line); border-radius:10px; padding:14px 16px; margin-bottom:24px; box-shadow: 0 4px 15px rgba(0,0,0,0.04);"></div>
+  <button onclick="retryHardcore()" class="load-btn" style="font-size: 18px; padding: 12px 30px;">もう一度挑戦(zキー)</button>
 </div>
 
 <div class="main-layout">
@@ -616,6 +617,9 @@
   let sessionStarted = false;
   let isPaused = false;
   let isSessionOver = false;
+  // ★ タイムアタック終了(結果画面表示中)かどうか。この間はZキーで
+  // 「もう一度プレイ」ボタンを押したのと同じ扱いにする(マウス操作を減らすため)
+  let isGameOver = false;
   let pauseStartedAt = null;
   let pausedDurationTotal = 0;
 
@@ -1343,7 +1347,9 @@
     if (e.key.toLowerCase() !== 'z') return;
     e.preventDefault();
     e.stopPropagation();
-    if (isSessionOver) return;
+    if (isGameOver) { restartGame(); return; }
+    // ★ ハードコアのミス失敗画面(「もう一度挑戦」)もZキーで押せるようにする
+    if (isSessionOver) { retryHardcore(); return; }
     if (!sessionStarted) {
       beginSession();
     } else {
@@ -1358,6 +1364,7 @@
     sessionStarted = false;
     isPaused = true;
     isSessionOver = false;
+    isGameOver = false;
     pauseStartedAt = Date.now();
     pausedDurationTotal = 0;
     document.getElementById('hardcore-fail-overlay').style.display = 'none';
@@ -1371,6 +1378,22 @@
     isPaused = true;
     clearInterval(timerInterval);
     clearInterval(gameInterval);
+
+    // ★ オーバーレイがサイドパネルを覆い隠して成績が見えなくなってしまうため、
+    // 終了時点の指標を確定させてオーバーレイ内にも表示しておく。
+    const finalElapsed = getElapsedSeconds(startTime);
+    updateStatsPanel(finalElapsed);
+    const progressText = parsedCourse.length ? `${currentIndex} / ${parsedCourse.length}` : '-';
+    const statEl = (id) => document.getElementById(id).textContent;
+    document.getElementById('hardcore-fail-stats').innerHTML = `
+        <div class="metric-row"><span>進捗</span><span class="metric-value">${escapeHTML(progressText)}</span></div>
+        <div class="metric-row"><span>入力文字数</span><span class="metric-value">${totalChars} 文字</span></div>
+        <div class="metric-row"><span>時間</span><span class="metric-value">${finalElapsed.toFixed(1)}s</span></div>
+        <div class="metric-row"><span>CPM</span><span class="metric-value">${escapeHTML(statEl('stat-cpm'))}</span></div>
+        <div class="metric-row"><span>MPM</span><span class="metric-value">${escapeHTML(statEl('stat-mpm'))}</span></div>
+        <div class="metric-row"><span>KPM1 (KPM2)</span><span class="metric-value">${escapeHTML(statEl('stat-kpm12'))}</span></div>
+    `;
+
     document.getElementById('hardcore-fail-overlay').style.display = 'flex';
   }
 
@@ -1437,6 +1460,7 @@
   }
 
   function startGame(wordsArray) {
+    isGameOver = false;
     gameWordsPool = buildWordPool(wordsArray);
     gameScore = 0;
     gameTimer = timeAttackSeconds;
@@ -1714,10 +1738,19 @@
   }
 
   window.restartGame = function() {
+    // startGame()はstartTimeを打刻し直すだけで、前回のプレイ中に溜まった
+    // pausedDurationTotal(一時停止していた時間の合計)はクリアされない。
+    // getElapsedSecondsはstartTimeからの経過時間よりこの値を差し引くため、
+    // リセットせずに次のプレイを始めるとその分だけタイマーが遅れて見えてしまう。
+    sessionStarted = true;
+    isPaused = false;
+    pauseStartedAt = null;
+    pausedDurationTotal = 0;
     startGame(parsedCourse);
   };
 
   function endGame() {
+    isGameOver = true;
     clearInterval(gameInterval);
     document.getElementById('game-time-text').innerText = "0.0";
     
@@ -1733,7 +1766,7 @@
                 正解数: <strong style="font-size: 32px; color: var(--status-text);">${gameScore}</strong> 問<br>
                 入力文字数: <strong style="font-size: 32px; color: var(--status-text);">${totalChars}</strong> 文字
             </div>
-            <button onclick="restartGame()" class="load-btn" style="font-size: 20px; padding: 15px 30px; margin-top: 30px; position:relative; z-index:100;">もう一度プレイ</button>
+            <button onclick="restartGame()" class="load-btn" style="font-size: 20px; padding: 15px 30px; margin-top: 30px; position:relative; z-index:100;">もう一度プレイ(zキー)</button>
         </div>
     `;
   }
