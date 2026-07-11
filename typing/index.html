@@ -843,7 +843,11 @@
     lastActiveTargetChar = null;
     keyStats = {};
     kanaStats = {};
-    mistakenLineTexts = new Set();
+    // ★ mistakenLineTextsはここでは触らない。resetSessionStats()はstartGame()
+    // (=もう一度プレイでの再挑戦も含む)からも呼ばれるため、ここでクリアすると
+    // 「もう一度プレイ」するたびに前回までのミス記録が消えてしまう。
+    // ミス記録のリセットは「新しいコースを選び直した」タイミング(loadCourse)
+    // 側でだけ行う。
     lastKeyTimestamp = null;
     skipNextTimingGap = true;
     nextExpectedKeys = [];
@@ -1459,10 +1463,14 @@
   }
 
   window.retryHardcore = function() {
-    if (courseSelect.value) loadCourse(courseSelect.value);
+    // ★ ハードコアの再挑戦も「もう一度プレイ」と同様、これまでのミス記録は
+    // 消さずに引き継ぐ(1回のミスで即終了する性質上、何度も再挑戦した分だけ
+    // ミス単語が積み上がっていくのが自然なため)。
+    if (courseSelect.value) loadCourse(courseSelect.value, { keepMistakes: true });
   };
 
-  function loadCourse(courseName) {
+  function loadCourse(courseName, opts) {
+    const keepMistakes = !!(opts && opts.keepMistakes);
     const rawLines = courseData[courseName];
     let parsed = rawLines.map(line => {
       const tokens = parseAozora(line);
@@ -1473,6 +1481,14 @@
       parsed = [...parsed].sort(() => Math.random() - 0.5);
     }
     parsedCourse = parsed;
+
+    // ★ ミス記録は「新しいコースを選び直した」タイミングでだけリセットする。
+    // (もう一度プレイ/ハードコア再挑戦はloadCourseを経由しないか、
+    // keepMistakes:trueで呼ばれるため、ここではリセットされない)
+    if (!keepMistakes) {
+      mistakenLineTexts = new Set();
+      renderPracticePanel();
+    }
 
     resetSessionGate();
 
