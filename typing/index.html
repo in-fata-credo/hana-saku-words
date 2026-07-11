@@ -543,6 +543,16 @@
 </div>
 
 <div id="mistake-sidebar">
+  <div class="side-panel" id="practice-panel" style="display:none;">
+    <div class="side-panel-title">苦手克服
+      <span class="info-icon-wrap"><span class="info-icon">?</span><span class="info-tooltip">
+        今回のコースでミスした単語(行)だけを集めた即席の復習コースを作ります。
+        完走を待たずいつでも押せます。タイムアタック中のミスも対象です。
+        復習コース側でまたミスすれば、次はさらにその分だけを集めた次の周へ進めます。
+      </span></span>
+    </div>
+    <div id="practice-panel-body"></div>
+  </div>
   <div class="side-panel">
     <div class="side-panel-title">苦手な文字
       <span class="info-icon-wrap"><span class="info-icon">?</span><span class="info-tooltip">
@@ -644,6 +654,11 @@
 
   let keyStats = {};
   let kanaStats = {};
+  // ★ 「苦手克服」練習コース用: 今回ミスが発生した行の原文(rawLine)を集める。
+  // タイムアタックは同じ単語が繰り返し・シャッフルで出るため行番号では
+  // 対応が取れず、内容そのもの(文字列)で管理する。空でなければ、いつでも
+  // (完走を待たず)それらの行だけを集めた即席コースへの導線を出す。
+  let mistakenLineTexts = new Set();
 
   let lastKeyTimestamp = null;
   let skipNextTimingGap = true;
@@ -828,12 +843,14 @@
     lastActiveTargetChar = null;
     keyStats = {};
     kanaStats = {};
+    mistakenLineTexts = new Set();
     lastKeyTimestamp = null;
     skipNextTimingGap = true;
     nextExpectedKeys = [];
     nextRecoveryKeys = [];
     renderHeatmap();
     renderMistakeList();
+    renderPracticePanel();
     updateStatsPanel(0);
   }
 
@@ -970,6 +987,26 @@
       html += `<div class="mistake-item"><span class="mistake-kana">${escapeHTML(e.kana)}</span><span>${tags}</span></div>`;
     });
     listEl.innerHTML = html;
+  }
+
+  // ★ 「苦手克服」導線。完走を待たず、ミスした行が1つでもあればいつでも
+  // 表示する(通常/ハードコア/タイムアタックいずれのモードでも共通)。
+  function renderPracticePanel() {
+    const panel = document.getElementById('practice-panel');
+    const body = document.getElementById('practice-panel-body');
+    if (!panel || !body) return;
+    if (mistakenLineTexts.size === 0 || !courseSelect.value) {
+      panel.style.display = 'none';
+      body.innerHTML = '';
+      return;
+    }
+    panel.style.display = 'block';
+    const nextName = getNextPracticeRoundName(courseSelect.value);
+    body.innerHTML = `
+      <button type="button" class="load-btn" style="width:100%; text-align:center; font-size:13px; padding:10px 8px;" onclick="startMistakePracticeRound()">
+        📝 ${escapeHTML(nextName)}(${mistakenLineTexts.size}語)を始める
+      </button>
+    `;
   }
 
   // ★ 新しいキーボードレイアウト定義
@@ -1117,6 +1154,29 @@
     }
   }
 
+  // ★ 「苦手克服」練習コースの名前を決める。
+  // 「元コース名 苦手克服N周目」からさらにミスがあれば「苦手克服(N+1)周目」、
+  // それ以外(通常コース)からなら「苦手克服1周目」を新たに作る。
+  function getNextPracticeRoundName(currentCourseName) {
+    const m = currentCourseName.match(/^(.*) 苦手克服(\d+)周目$/);
+    if (m) {
+      return `${m[1]} 苦手克服${parseInt(m[2], 10) + 1}周目`;
+    }
+    return `${currentCourseName} 苦手克服1周目`;
+  }
+
+  // 今回のコースでミスした行だけを集めた即席コースを作り、それを読み込む
+  function startMistakePracticeRound() {
+    if (mistakenLineTexts.size === 0 || !courseSelect.value) return;
+    const lines = Array.from(mistakenLineTexts);
+    const newName = getNextPracticeRoundName(courseSelect.value);
+    courseData[newName] = lines;
+    buildDropdown();
+    courseSelect.value = newName;
+    loadCourse(newName);
+  }
+  window.startMistakePracticeRound = startMistakePracticeRound;
+
   const hiraToKata = (str) => {
     if (!str) return "";
     return str.replace(/[\u3041-\u3096]/g, match => String.fromCharCode(match.charCodeAt(0) + 0x60));
@@ -1177,6 +1237,7 @@
       updateStatsPanel(elapsed);
       renderHeatmap();
       renderMistakeList();
+      renderPracticePanel();
     }, 100);
   }
 
@@ -1470,6 +1531,11 @@
 
     document.getElementById('game-score-val').innerText = gameScore;
     document.getElementById('game-time-text').innerText = gameTimer.toFixed(1);
+    // ★ サイドパネルの「進捗」は通常モードのupdateStatus()経由でしか更新されず、
+    // タイムアタックでは一度も呼ばれないため前回の値が残ってしまう。
+    // 通常モードと同じ「X / Y」表記に合わせ、「今の周回で正解した数 / コースの
+    // 単語総数」を表す(周回すると0に戻って繰り返す)。
+    setProgressText(`0 / ${parsedCourse.length}`);
 
     const inputField = document.getElementById('game-real-input');
     inputField.style.display = 'block';
@@ -1487,6 +1553,7 @@
       updateStatsPanel(elapsed);
       renderHeatmap();
       renderMistakeList();
+      renderPracticePanel();
 
       if (gameTimer <= 0) {
           endGame();
@@ -1646,7 +1713,10 @@
               }
             }
             lastCharStatus = frameLastStatus;
-            
+            // ★ 「苦手克服」練習コース用に、ミスが発生した単語を記録しておく
+            // (タイムアタックは同じ単語が繰り返し出るため内容そのもので管理)
+            if (frameLastStatus === 'mistake') mistakenLineTexts.add(currentWordObj.rawLine);
+
             if(typedText === "") typedText = `<span style="visibility:hidden;">_</span>`;
 
             iLayer = `<div style="display: flex; align-items: center;">${typedText}<span class="custom-caret"></span></div>`;
@@ -1727,7 +1797,11 @@
         skipNextTimingGap = true;
         gameScore++;
         document.getElementById('game-score-val').innerText = gameScore;
-        
+        // ★ 周回(gameWordsPoolが尽きたら再シャッフルして繰り返す)ごとに0へ戻る
+        // 「今の周回の正解数 / コースの単語総数」を表示する(通常モードのX/Yに対応)
+        const lapProgress = parsedCourse.length > 0 ? (gameScore % parsedCourse.length) : 0;
+        setProgressText(`${lapProgress} / ${parsedCourse.length}`);
+
         const visualWrapper = document.getElementById('game-visual-wrapper');
         visualWrapper.classList.add('pop-anim');
         
@@ -1781,6 +1855,9 @@
       clearMsg.style.color = 'var(--text-active-prompt)';
       clearMsg.innerHTML = '✿ 満開になりました。お疲れ様でした！';
       textContainer.appendChild(clearMsg);
+      // ★「苦手克服」への導線はサイドパネル(#practice-panel)側に常設したので
+      // ここでは出さない(完走を待たずいつでも押せるようにするため)。
+
       updateStatus();
       return;
     }
@@ -1943,7 +2020,9 @@
                   }
                 }
                 lastCharStatus = frameLastStatus;
-                
+                // ★ 「苦手克服」練習コース用に、ミスが発生した単語を記録しておく
+                if (frameLastStatus === 'mistake') mistakenLineTexts.add(parsed.rawLine);
+
                 if(typedText === "") typedText = `<span style="visibility:hidden;">_</span>`;
 
                 iLayer = `<div style="display: flex; align-items: center;">${typedText}<span class="custom-caret"></span></div>`;
