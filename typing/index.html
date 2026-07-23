@@ -452,13 +452,23 @@
     <label style="color: var(--status-text); font-weight: bold; display:block; margin-bottom:8px;">プレイ形式</label>
     <label style="margin-right:15px;"><input type="radio" name="play-format" id="play-format-normal" value="normal" checked> 通常</label>
     <label style="margin-right:15px;"><input type="radio" name="play-format" id="play-format-timeattack" value="timeattack"> タイムアタック</label>
-    <label><input type="radio" name="play-format" id="play-format-hardcore" value="hardcore"> ハードコア(1ミスで終了)</label>
+    <label style="margin-right:15px;"><input type="radio" name="play-format" id="play-format-hardcore" value="hardcore"> ハードコア(1ミスで終了)</label>
+    <label><input type="radio" name="play-format" id="play-format-sokutatsu" value="sokutatsu"> 速達(指定速度をノーミス突破)</label>
   </div>
 
   <div id="timeattack-seconds-wrapper" style="margin-top: 12px; display:none;">
     <label style="color: var(--status-text);">制限時間(秒):
       <input type="number" id="timeattack-seconds" value="60" min="5" max="600" style="width:70px; padding:4px 8px;">
     </label>
+  </div>
+
+  <div id="sokutatsu-speed-wrapper" style="margin-top: 12px; display:none;">
+    <label style="color: var(--status-text);">目標速度(KPM):
+      <input type="number" id="sokutatsu-speed" value="300" min="10" max="3000" style="width:80px; padding:4px 8px;">
+    </label>
+    <div style="font-size:12px; color: var(--status-text); margin-top:6px;">
+      ※ ノーミスでこの速度を超えるまで、同じ単語を繰り返します。ミスした瞬間もその単語からやり直しになります。
+    </div>
   </div>
 
   <div style="margin-top: 25px; padding-top: 20px; border-top: 1px solid var(--border-line);">
@@ -477,6 +487,11 @@
 
 <div class="main-layout">
 <div class="main-content">
+
+<div id="sokutatsu-banner" style="display:none; align-items:center; justify-content:space-between; gap:16px; background:#fff; border:1px solid var(--border-line); border-radius:10px; padding:10px 16px; margin-bottom:20px; font-family:sans-serif; font-size:14px; color: var(--status-text); box-shadow: 0 4px 15px rgba(0,0,0,0.02); position:sticky; top:66px; z-index:44;">
+  <span>速達モード ― 目標 <b id="sokutatsu-target-label" style="color: var(--text-completed);">300</b> KPM 以上・ノーミスでクリア</span>
+  <span id="sokutatsu-feedback" style="font-weight:bold;"></span>
+</div>
 
 <div id="text-container"></div>
 
@@ -642,6 +657,12 @@
 
   let normalInputValue = "";
   let gameInputValue = "";
+
+  // ★ 速達モード: ノーミスで指定速度(KPM=物理キー押下数ベース)を超えるまで同じ単語をやり直す
+  let sokutatsuAttemptStartTime = null;
+  let sokutatsuLocked = false;
+  let sokutatsuTargetKpm = 300;
+  let sokutatsuKeyCount = 0;
 
   let statsKpm1 = 0;
   let statsKpm2 = 0;
@@ -1289,11 +1310,15 @@
     });
   });
 
+  const sokutatsuSpeedWrapper = document.getElementById('sokutatsu-speed-wrapper');
+  const sokutatsuSpeedInput = document.getElementById('sokutatsu-speed');
+
   document.querySelectorAll('input[name="play-format"]').forEach(radio => {
     radio.addEventListener('change', () => {
       if (radio.checked) {
         playFormat = radio.value;
         timeattackSecondsWrapper.style.display = (playFormat === 'timeattack') ? 'block' : 'none';
+        sokutatsuSpeedWrapper.style.display = (playFormat === 'sokutatsu') ? 'block' : 'none';
         if (courseSelect.value) loadCourse(courseSelect.value);
       }
     });
@@ -1304,6 +1329,13 @@
     timeAttackSeconds = (!isNaN(v) && v > 0) ? v : 60;
     timeattackSecondsInput.value = timeAttackSeconds;
     if (playFormat === 'timeattack' && courseSelect.value) loadCourse(courseSelect.value);
+  });
+
+  sokutatsuSpeedInput.addEventListener('change', () => {
+    const v = parseInt(sokutatsuSpeedInput.value, 10);
+    sokutatsuTargetKpm = (!isNaN(v) && v > 0) ? v : 300;
+    sokutatsuSpeedInput.value = sokutatsuTargetKpm;
+    if (playFormat === 'sokutatsu' && courseSelect.value) loadCourse(courseSelect.value);
   });
 
   // ★ Zキーでスタート/一時停止
@@ -1469,6 +1501,42 @@
     if (courseSelect.value) loadCourse(courseSelect.value, { keepMistakes: true });
   };
 
+  // ★ 速達モード: 同じ単語(現在の行)の入力欄を作り直し、やり直しさせる。
+  // inputDiv.innerHTML を空にすることで、renderLines() 内の
+  // 「real-inputが無ければ新規作成する」分岐を再度通らせ、新しい
+  // 試行として normalInputValue や sokutatsuAttemptStartTime を
+  // まっさらな状態から始められるようにする。
+  function restartCurrentSokutatsuLine() {
+    if (playFormat !== 'sokutatsu' || !sessionStarted || isPaused) return;
+    const blockDiv = document.getElementById(`block-${currentIndex}`);
+    if (!blockDiv) return;
+    const inputDiv = blockDiv.querySelector('.input-space');
+    if (!inputDiv) return;
+    inputDiv.innerHTML = '';
+    skipNextTimingGap = true;
+    renderLines();
+  }
+
+  function showSokutatsuResult(kpm, passed) {
+    const fb = document.getElementById('sokutatsu-feedback');
+    if (!fb) return;
+    const kpmRounded = Math.round(kpm);
+    if (passed) {
+      fb.textContent = `✓ ${kpmRounded} KPM でクリア！`;
+      fb.style.color = 'var(--text-active-prompt)';
+    } else {
+      fb.textContent = `✕ ${kpmRounded} KPM (目標未達) もう一度`;
+      fb.style.color = '#e11d48';
+    }
+  }
+
+  function showSokutatsuMistakeFeedback() {
+    const fb = document.getElementById('sokutatsu-feedback');
+    if (!fb) return;
+    fb.textContent = 'ミス！もう一度';
+    fb.style.color = '#e11d48';
+  }
+
   function loadCourse(courseName, opts) {
     const keepMistakes = !!(opts && opts.keepMistakes);
     const rawLines = courseData[courseName];
@@ -1491,6 +1559,18 @@
     }
 
     resetSessionGate();
+
+    sokutatsuAttemptStartTime = null;
+    sokutatsuLocked = false;
+    sokutatsuKeyCount = 0;
+    const sokutatsuBanner = document.getElementById('sokutatsu-banner');
+    if (playFormat === 'sokutatsu') {
+      sokutatsuBanner.style.display = 'flex';
+      document.getElementById('sokutatsu-target-label').textContent = sokutatsuTargetKpm;
+      document.getElementById('sokutatsu-feedback').textContent = '';
+    } else {
+      sokutatsuBanner.style.display = 'none';
+    }
 
     if (playFormat === 'timeattack') {
       isGameMode = true;
@@ -1902,8 +1982,10 @@
           const inputField = inputDiv.querySelector('.real-input');
           const visualDiv = inputDiv.querySelector('.visual-wrapper');
           
-          normalInputValue = ""; 
+          normalInputValue = "";
           inputField.focus();
+          sokutatsuAttemptStartTime = null;
+          sokutatsuKeyCount = 0;
 
           const updateVisuals = (val) => {
             let targetReading = parsed.tokens.map(t => t.target).join('');
@@ -2064,7 +2146,10 @@
 
           const checkInput = () => {
             if (!startTime) startTimer();
-            
+            if (playFormat === 'sokutatsu' && sokutatsuAttemptStartTime === null) {
+              sokutatsuAttemptStartTime = performance.now();
+            }
+
             let raw = applyCustomIME(normalInputValue);
             normalInputValue = raw; // 内部バッファ(境界マーカーを含み得る)
             let val = stripBoundary(raw); // 表示・判定用(マーカー除去済み)
@@ -2092,14 +2177,32 @@
             }
 
             if (matchLen === targetReading.length && val.length === targetReading.length) {
-              totalChars += parsed.targetLine.length;
               const { displayChars, moraCount } = computeLineMetrics(parsed);
+
+              // ★ 速達モード: ノーミスでここまで来ても、指定速度(KPM=実際に
+              // 押した物理キー数ベース)未満ならクリア扱いにせず同じ単語をやり直させる。
+              if (playFormat === 'sokutatsu') {
+                const attemptElapsed = sokutatsuAttemptStartTime
+                  ? (performance.now() - sokutatsuAttemptStartTime) / 1000 : 0;
+                const kpm = attemptElapsed > 0 ? (sokutatsuKeyCount / attemptElapsed * 60) : 0;
+                if (kpm < sokutatsuTargetKpm) {
+                  showSokutatsuResult(kpm, false);
+                  mistakenLineTexts.add(parsed.rawLine);
+                  renderPracticePanel();
+                  sokutatsuLocked = true;
+                  setTimeout(() => { sokutatsuLocked = false; restartCurrentSokutatsuLine(); }, 500);
+                  return;
+                }
+                showSokutatsuResult(kpm, true);
+              }
+
+              totalChars += parsed.targetLine.length;
               statsDisplayCharsTotal += displayChars;
               statsMoraTotal += moraCount;
-              skipNextTimingGap = true; 
+              skipNextTimingGap = true;
               currentIndex++;
               renderLines();
-              
+
               const nextBlock = document.getElementById(`block-${currentIndex}`);
               if (nextBlock) {
                  nextBlock.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -2109,8 +2212,10 @@
 
           inputField.addEventListener('keydown', (e) => {
             if (!sessionStarted || isPaused) return;
+            if (playFormat === 'sokutatsu' && sokutatsuLocked) return;
             if (e.code === 'CapsLock' || e.key === 'Alphanumeric' || e.code === 'Lang2' || e.key === 'Backspace') {
               e.preventDefault();
+              if (playFormat === 'sokutatsu') sokutatsuKeyCount++;
               normalInputValue = deleteOneVisibleChar(normalInputValue);
               recordDeletion();
               checkInput();
@@ -2119,9 +2224,18 @@
 
             if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
               e.preventDefault();
+              if (playFormat === 'sokutatsu') sokutatsuKeyCount++;
               normalInputValue += e.key;
               checkInput();
               recordKeystroke(e.key);
+
+              // ★ 速達モードは「ノーミス」が条件のため、ミスした瞬間に
+              // 同じ単語をやり直させる(打ち直して復帰する猶予は与えない)。
+              if (playFormat === 'sokutatsu' && lastCharStatus === 'mistake') {
+                showSokutatsuMistakeFeedback();
+                sokutatsuLocked = true;
+                setTimeout(() => { sokutatsuLocked = false; restartCurrentSokutatsuLine(); }, 450);
+              }
             }
           });
 
