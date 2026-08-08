@@ -1109,14 +1109,24 @@
       }
 
       const romanText = await romanRes.text();
+      // ★ 行末の改行のみを除去する(trim()は使わない)。半角スペース1文字が
+      // 意図的な値(例:ブロックキーの出力)として使われているため、
+      // 汎用的な空白除去をすると消えてしまう。区切りもタブのみに限定する。
       romanText.split('\n').forEach(line => {
-        line = line.trim();
-        if (!line) return;
-        const parts = line.split(/[\t ]+/);
-        if (parts.length >= 2) {
-          const key = parts[0];
-          const val = parts[parts.length - 1];
-          if (key && val) customKeyMap[key] = val;
+        line = line.replace(/[\r\n]+$/, '');
+        if (line === '') return;
+        const parts = line.split('\t');
+        const key = parts[0];
+        if (!key) return;
+        let val;
+        for (let i = parts.length - 1; i >= 1; i--) {
+          if (parts[i] !== '') { val = parts[i]; break; }
+        }
+        if (val !== undefined) {
+          customKeyMap[key] = val;
+        } else if (parts.length === 1) {
+          // ★ 値の列が無い(キーのみの)行 = そのキー単体では何も入力させない
+          customKeyMap[key] = "";
         }
       });
       
@@ -1221,7 +1231,9 @@
       for (let len = 6; len >= 1; len--) {
         if (result.length >= len) {
           let suffix = result.slice(-len);
-          if (customKeyMap[suffix]) {
+          // ★ 値が空文字("")のブロックキーも正しく適用されるよう、
+          // 単なる真偽値チェックではなくキーの存在で判定する
+          if (Object.prototype.hasOwnProperty.call(customKeyMap, suffix)) {
             result = result.slice(0, -len) + customKeyMap[suffix];
             break;
           }
