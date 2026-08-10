@@ -1259,6 +1259,13 @@
     return !!(allowed && allowed.has(kataToHira(targetChar)));
   }
 
+  // ★ 目標が「わ」の位置は、「あ」を打っても正解として扱う
+  // (例:「あらわれる」を「あらあれる」と打ってもOK)
+  function isWaAaMatch(typedChar, targetChar) {
+    if (!targetChar) return false;
+    return kataToHira(targetChar) === 'わ' && kataToHira(typedChar) === 'あ';
+  }
+
   function applyCustomIME(inputStr) {
     let result = "";
     for (let i = 0; i < inputStr.length; i++) {
@@ -1734,6 +1741,8 @@
             typedChar = targetChar;
         } else if (isLongVowelMatch(typedChar, targetReading, i)) {
             typedChar = targetChar;
+        } else if (isWaAaMatch(typedChar, targetChar)) {
+            typedChar = targetChar;
         }
         adjustedVal += typedChar;
     }
@@ -1844,6 +1853,7 @@
                 let targetChar = targetReading[targetPos];
                 if (targetChar && hiraToKata(char) === targetChar) char = targetChar;
                 else if (isLongVowelMatch(char, targetReading, targetPos)) char = targetChar;
+                else if (isWaAaMatch(char, targetChar)) char = targetChar;
                 typedText += char;
             }
             typedText = `<span style="color: var(--text-completed); font-weight: bold;">${escapeHTML(typedText)}</span>`;
@@ -1930,10 +1940,12 @@
         if (/[ァ-ヶ]/.test(targetChar)) {
             if (/[ぁ-ゖ]/.test(typedChar) && hiraToKata(typedChar) === targetChar) matchLen++;
             else if (isLongVowelMatch(typedChar, targetReading, i)) matchLen++;
+            else if (isWaAaMatch(typedChar, targetChar)) matchLen++;
             else break;
         } else {
             if (typedChar === targetChar) matchLen++;
             else if (isLongVowelMatch(typedChar, targetReading, i)) matchLen++;
+            else if (isWaAaMatch(typedChar, targetChar)) matchLen++;
             else break;
         }
     }
@@ -2051,6 +2063,8 @@
                     typedChar = targetChar;
                 } else if (isLongVowelMatch(typedChar, targetReading, i)) {
                     typedChar = targetChar;
+                } else if (isWaAaMatch(typedChar, targetChar)) {
+                    typedChar = targetChar;
                 }
                 adjustedVal += typedChar;
             }
@@ -2159,6 +2173,7 @@
                     let targetChar = targetReading[targetPos];
                     if (targetChar && hiraToKata(char) === targetChar) char = targetChar;
                     else if (isLongVowelMatch(char, targetReading, targetPos)) char = targetChar;
+                    else if (isWaAaMatch(char, targetChar)) char = targetChar;
                     typedText += char;
                 }
                 typedText = `<span style="color: var(--text-completed); font-weight: bold;">${escapeHTML(typedText)}</span>`;
@@ -2227,10 +2242,12 @@
                 if (/[ァ-ヶ]/.test(targetChar)) {
                     if (/[ぁ-ゖ]/.test(typedChar) && hiraToKata(typedChar) === targetChar) matchLen++;
                     else if (isLongVowelMatch(typedChar, targetReading, i)) matchLen++;
+                    else if (isWaAaMatch(typedChar, targetChar)) matchLen++;
                     else break;
                 } else {
                     if (typedChar === targetChar) matchLen++;
                     else if (isLongVowelMatch(typedChar, targetReading, i)) matchLen++;
+                    else if (isWaAaMatch(typedChar, targetChar)) matchLen++;
                     else break;
                 }
             }
